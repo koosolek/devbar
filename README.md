@@ -30,7 +30,7 @@ Requires macOS 13 (Ventura) or later.
 ## Build from source
 
 ```bash
-git clone https://github.com/wieandteduard/Porter.git
+git clone https://github.com/wieandteduard/port-menu.git
 cd Porter
 open Porter.xcodeproj
 ```
