@@ -37,22 +37,23 @@ struct PorterApp: App {
 
 struct OnboardingView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @State private var contentReady = false
     @State private var portVisible: [Bool] = Array(repeating: false, count: 8)
     @State private var portsGone = false
     @State private var titleVisible = false
     @State private var subtitleVisible = false
     @State private var buttonsVisible = false
 
-    // Positions scaled to 340×280 from original 460×320
+    // Positions scaled to 320×270
     private let ports: [(label: String, x: CGFloat, y: CGFloat)] = [
-        ("localhost:3000",  53,  46),
-        ("localhost:5173", 265,  33),
-        ("localhost:8080",  35, 142),
-        ("localhost:4000", 257, 138),
-        ("localhost:3001", 140,  82),
-        ("localhost:9000",  71, 235),
-        ("localhost:8000", 260, 224),
-        ("localhost:5000", 163, 193),
+        ("localhost:3000",  50,  44),
+        ("localhost:5173", 250,  31),
+        ("localhost:8080",  33, 135),
+        ("localhost:4000", 242, 131),
+        ("localhost:3001", 132,  78),
+        ("localhost:9000",  67, 222),
+        ("localhost:8000", 245, 211),
+        ("localhost:5000", 153, 182),
     ]
 
     private let revealDelays: [Double] = [0.05, 0.25, 0.42, 0.56, 0.67, 0.75, 0.81, 0.86]
@@ -111,8 +112,15 @@ struct OnboardingView: View {
                 .modifier(RevealModifier(visible: buttonsVisible))
             }
         }
-        .frame(width: 340, height: 280)
-        .onAppear { runSequence() }
+        .frame(width: 320, height: 270)
+        .clipped()
+        .opacity(contentReady ? 1 : 0)
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                contentReady = true
+                runSequence()
+            }
+        }
     }
 
     private func runSequence() {
@@ -538,7 +546,9 @@ struct PortRow: View {
 
                     HStack(spacing: 2) {
                         HoverButton("Kill", role: .destructive) { killWithAnimation() }
-                        HoverButton("Open") { NSWorkspace.shared.open(entry.url) }
+                        HoverButton("Open") {
+                            DispatchQueue.main.async { NSWorkspace.shared.open(entry.url) }
+                        }
                     }
                     .opacity(isHovered ? 1 : 0)
                     .scaleEffect(isHovered ? 1 : 0.85, anchor: .trailing)
@@ -584,7 +594,9 @@ struct PortRow: View {
         }
         .contextMenu {
             Button("Copy URL") { PortStore.copyURL(entry.url) }
-            Button("Open in Browser") { NSWorkspace.shared.open(entry.url) }
+            Button("Open in Browser") {
+                DispatchQueue.main.async { NSWorkspace.shared.open(entry.url) }
+            }
             Divider()
             Button("Kill Server", role: .destructive) { killWithAnimation() }
         }
@@ -606,8 +618,6 @@ struct HoverButton: View {
     let label: String
     let role: ButtonRole?
     let action: () -> Void
-    @State private var isHovered = false
-    @State private var isPressed = false
 
     init(_ label: String, role: ButtonRole? = nil, action: @escaping () -> Void) {
         self.label = label
@@ -616,35 +626,37 @@ struct HoverButton: View {
     }
 
     var body: some View {
-        Text(label)
-            .font(.caption)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(Capsule().fill(backgroundColor))
-            .foregroundStyle(foregroundColor)
-            .scaleEffect(isPressed ? 0.92 : isHovered ? 1.04 : 1)
-            .animation(.spring(response: 0.2, dampingFraction: 0.6), value: isPressed)
+        Button(action: action) {
+            Text(label)
+                .font(.caption)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+        }
+        .buttonStyle(RowButtonStyle(destructive: role == .destructive))
+    }
+}
+
+struct RowButtonStyle: ButtonStyle {
+    let destructive: Bool
+    @State private var isHovered = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(Capsule().fill(backgroundColor(configuration)))
+            .foregroundStyle(foregroundColor(configuration))
+            .scaleEffect(configuration.isPressed ? 0.92 : isHovered ? 1.04 : 1)
+            .animation(.spring(response: 0.2, dampingFraction: 0.6), value: configuration.isPressed)
             .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isHovered)
-            .onHover { hovering in withAnimation { isHovered = hovering } }
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in if !isPressed { isPressed = true } }
-                    .onEnded { _ in isPressed = false }
-            )
-            .onTapGesture { action() }
+            .onHover { isHovered = $0 }
     }
 
-    private var backgroundColor: Color {
-        if role == .destructive {
-            return isHovered ? .red.opacity(0.15) : .clear
-        }
+    private func backgroundColor(_ c: ButtonStyleConfiguration) -> Color {
+        if destructive { return isHovered ? .red.opacity(0.15) : .clear }
         return isHovered ? .primary.opacity(0.1) : .primary.opacity(0.05)
     }
 
-    private var foregroundColor: Color {
-        if role == .destructive {
-            return isHovered ? .red : .secondary
-        }
+    private func foregroundColor(_ c: ButtonStyleConfiguration) -> Color {
+        if destructive { return isHovered ? .red : .secondary }
         return .primary
     }
 }
