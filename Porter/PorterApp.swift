@@ -8,6 +8,14 @@ import SwiftUI
 struct PorterApp: App {
     @ObservedObject private var store = PortStore.shared
 
+    init() {
+        if !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                OnboardingWindowController.shared.show()
+            }
+        }
+    }
+
     var body: some Scene {
         MenuBarExtra {
             PortListView()
@@ -24,6 +32,195 @@ struct PorterApp: App {
             .onAppear { store.ensurePolling() }
         }
         .menuBarExtraStyle(.window)
+    }
+}
+
+// ──────────────────────────────────────────────
+// Onboarding
+// ──────────────────────────────────────────────
+
+final class OnboardingWindowController: NSObject {
+    static let shared = OnboardingWindowController()
+    private var window: NSWindow?
+
+    func show() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 460, height: 360),
+            styleMask: [.titled, .closable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.isMovableByWindowBackground = true
+        window.backgroundColor = .white
+        window.contentView = NSHostingView(rootView: OnboardingView())
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        self.window = window
+    }
+
+    func close() {
+        window?.orderOut(nil)
+        window = nil
+    }
+}
+
+struct OnboardingView: View {
+    @State private var step = 0
+
+    private let steps: [(title: String, body: String, detail: String)] = [
+        (
+            "Port Menu",
+            "Your dev servers,\nalways in view.",
+            "A menu bar app that automatically\ndetects what's running locally."
+        ),
+        (
+            "How it works",
+            "No setup required.",
+            "Port Menu scans for running dev servers\nand shows the project name, branch,\nport, and uptime — automatically."
+        ),
+        (
+            "You're all set.",
+            "Find Port Menu\nin your menu bar.",
+            "Click the icon anytime to see\nwhat's running and open or stop servers."
+        )
+    ]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text(steps[step].title)
+                    .font(.system(size: step == 0 ? 42 : 28, weight: .semibold, design: .default))
+                    .tracking(-0.5)
+                    .padding(.bottom, step == 0 ? 20 : 14)
+
+                Text(steps[step].body)
+                    .font(.system(size: 22, weight: .medium, design: .default))
+                    .foregroundStyle(.primary)
+                    .lineSpacing(4)
+                    .padding(.bottom, 16)
+
+                Text(steps[step].detail)
+                    .font(.system(size: 14, weight: .regular, design: .default))
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(3)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 48)
+            .animation(.easeInOut(duration: 0.25), value: step)
+
+            Spacer()
+
+            HStack {
+                HStack(spacing: 6) {
+                    ForEach(0..<3) { i in
+                        Circle()
+                            .fill(i == step ? Color.primary : Color.primary.opacity(0.15))
+                            .frame(width: 5, height: 5)
+                            .animation(.easeInOut(duration: 0.2), value: step)
+                    }
+                }
+
+                Spacer()
+
+                if step < 2 {
+                    Button("Continue") { withAnimation { step += 1 } }
+                        .buttonStyle(OnboardingButtonStyle())
+                } else {
+                    Button("Get Started") {
+                        UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+                        OnboardingWindowController.shared.close()
+                        ActiveTooltipController.show()
+                    }
+                    .buttonStyle(OnboardingButtonStyle())
+                }
+            }
+            .padding(.horizontal, 48)
+            .padding(.bottom, 40)
+        }
+        .frame(width: 460, height: 360)
+        .background(Color.white)
+    }
+}
+
+struct OnboardingButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.black.opacity(configuration.isPressed ? 0.7 : 1))
+            )
+    }
+}
+
+// ──────────────────────────────────────────────
+// Active Tooltip
+// ──────────────────────────────────────────────
+
+final class ActiveTooltipController: NSObject {
+    static func show() {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 200, height: 40),
+            styleMask: [.nonactivatingPanel, .fullSizeContentView, .borderless],
+            backing: .buffered,
+            defer: false
+        )
+        panel.isFloatingPanel = true
+        panel.level = .statusBar
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.hasShadow = false
+
+        if let screen = NSScreen.main {
+            let x = (screen.frame.width - 200) / 2
+            let y = screen.frame.maxY - 70
+            panel.setFrameOrigin(NSPoint(x: x, y: y))
+        }
+
+        panel.contentView = NSHostingView(rootView: ActiveTooltipView())
+        panel.alphaValue = 0
+        panel.orderFront(nil)
+
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.3
+            panel.animator().alphaValue = 1
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.4
+                panel.animator().alphaValue = 0
+            } completionHandler: {
+                panel.orderOut(nil)
+            }
+        }
+    }
+}
+
+struct ActiveTooltipView: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(.green)
+                .frame(width: 6, height: 6)
+            Text("Port Menu is active")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(
+            Capsule()
+                .fill(Color(white: 0.08))
+        )
     }
 }
 
@@ -282,7 +479,7 @@ struct PortListView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Text("Porter").font(.headline)
+            Text("Port Menu").font(.headline)
             Spacer()
 
             Button(action: store.refresh) {
