@@ -623,6 +623,7 @@ struct HoverButton: View {
     let role: ButtonRole?
     let action: () -> Void
     @State private var isHovered = false
+    @State private var isPressed = false
 
     init(_ label: String, role: ButtonRole? = nil, action: @escaping () -> Void) {
         self.label = label
@@ -631,19 +632,22 @@ struct HoverButton: View {
     }
 
     var body: some View {
-        Button(action: action) {
-            Text(label)
-                .font(.caption)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(
-                    Capsule()
-                        .fill(backgroundColor)
-                )
-                .foregroundStyle(foregroundColor)
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
+        Text(label)
+            .font(.caption)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(backgroundColor))
+            .foregroundStyle(foregroundColor)
+            .scaleEffect(isPressed ? 0.92 : isHovered ? 1.04 : 1)
+            .animation(.spring(response: 0.2, dampingFraction: 0.6), value: isPressed)
+            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isHovered)
+            .onHover { hovering in withAnimation { isHovered = hovering } }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in if !isPressed { isPressed = true } }
+                    .onEnded { _ in isPressed = false }
+            )
+            .onTapGesture { action() }
     }
 
     private var backgroundColor: Color {
