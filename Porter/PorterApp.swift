@@ -279,9 +279,9 @@ final class PortStore: ObservableObject {
             let ports = Self.discoverPorts()
             DispatchQueue.main.async {
                 guard let self else { return }
-                let currentIDs = self.entries.map(\.id)
-                let newIDs = ports.map(\.id)
-                if currentIDs != newIDs {
+                let changed = self.entries.count != ports.count
+                    || zip(self.entries, ports).contains { $0.id != $1.id || $0.pid != $1.pid }
+                if changed {
                     self.entries = ports
                 }
             }
