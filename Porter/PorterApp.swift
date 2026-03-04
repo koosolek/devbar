@@ -380,6 +380,11 @@ final class PortStore: ObservableObject {
             }
         }
 
+        let activeCWDs = Set(cwds.values)
+        let activeRoots = Set(gitRoots.values.map(\.path))
+        gitRootCache = gitRootCache.filter { activeCWDs.contains($0.key) }
+        branchCache = branchCache.filter { activeRoots.contains($0.key) }
+
         return portInfos
             .sorted { $0.port < $1.port }
             .compactMap { info -> ActivePort? in
@@ -599,6 +604,7 @@ struct PortRow: View {
                     Text(entry.projectName)
                         .font(.system(.body, weight: .medium))
                         .lineLimit(1)
+                        .truncationMode(.tail)
 
                     Spacer()
 
