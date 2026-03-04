@@ -19,7 +19,7 @@ Port Menu sits in your menu bar and automatically detects local development serv
 
 ## Download
 
-**[Download for macOS →](https://github.com/wieandteduard/Porter/releases/latest)**
+**[Download for macOS →](https://portmenu.dev)**
 
 Requires macOS 13 (Ventura) or later.
 
