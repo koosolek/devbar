@@ -44,6 +44,7 @@ struct OnboardingView: View {
     @State private var titleVisible = false
     @State private var subtitleVisible = false
     @State private var buttonsVisible = false
+    private static var hasAnimatedThisLaunch = false
 
     // Positions scaled to 340×270
     private let ports: [(label: String, x: CGFloat, y: CGFloat)] = [
@@ -61,15 +62,16 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack {
-            // Phase 1: scattered ports
-            ForEach(ports.indices, id: \.self) { i in
-                ScrambleText(target: ports[i].label, trigger: portVisible[i])
-                    .font(.system(size: 10, weight: .regular, design: .monospaced))
-                    .foregroundStyle(Color.primary.opacity(portsGone ? 0 : 0.22))
-                    .blur(radius: portVisible[i] ? (portsGone ? 6 : 0) : 4)
-                    .scaleEffect(portVisible[i] ? (portsGone ? 0.94 : 1) : 0.88)
-                    .opacity(portVisible[i] ? (portsGone ? 0 : 1) : 0)
-                    .position(x: ports[i].x, y: ports[i].y)
+            if !Self.hasAnimatedThisLaunch {
+                ForEach(ports.indices, id: \.self) { i in
+                    ScrambleText(target: ports[i].label, trigger: portVisible[i])
+                        .font(.system(size: 10, weight: .regular, design: .monospaced))
+                        .foregroundStyle(Color.primary.opacity(portsGone ? 0 : 0.22))
+                        .blur(radius: portVisible[i] ? (portsGone ? 6 : 0) : 4)
+                        .scaleEffect(portVisible[i] ? (portsGone ? 0.94 : 1) : 0.88)
+                        .opacity(portVisible[i] ? (portsGone ? 0 : 1) : 0)
+                        .position(x: ports[i].x, y: ports[i].y)
+                }
             }
 
             // Phase 2: main content
@@ -117,22 +119,20 @@ struct OnboardingView: View {
         .clipped()
         .opacity(contentReady ? 1 : 0)
         .onAppear {
+            if Self.hasAnimatedThisLaunch {
+                contentReady = true
+                titleVisible = true
+                subtitleVisible = true
+                buttonsVisible = true
+                return
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                 contentReady = true
                 guard !sequenceStarted else { return }
                 sequenceStarted = true
+                Self.hasAnimatedThisLaunch = true
                 runSequence()
             }
-        }
-        .onDisappear {
-            // Full reset so animation always replays correctly next open
-            contentReady = false
-            sequenceStarted = false
-            portVisible = Array(repeating: false, count: 8)
-            portsGone = false
-            titleVisible = false
-            subtitleVisible = false
-            buttonsVisible = false
         }
     }
 
@@ -219,15 +219,17 @@ struct RevealModifier: ViewModifier {
 }
 
 struct OnboardingButtonStyle: ButtonStyle {
+    @Environment(\.colorScheme) private var colorScheme
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(.white)
+            .foregroundStyle(colorScheme == .dark ? .black : .white)
             .padding(.horizontal, 20)
             .padding(.vertical, 9)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.black.opacity(configuration.isPressed ? 0.7 : 1))
+                    .fill(Color.primary.opacity(configuration.isPressed ? 0.7 : 1))
             )
     }
 }
@@ -270,35 +272,42 @@ final class PortStore: ObservableObject {
     @Published var entries: [ActivePort] = []
 
     private var timer: Timer?
+    private var isRefreshing = false
+    private var recentlyKilled = Set<UInt16>()
+    private static var gitRootCache = [String: URL?]()
+    private static var branchCache = [String: (branch: String, resolved: Date)]()
 
     private init() {}
 
     func ensurePolling() {
         guard timer == nil else { return }
         refresh()
-        timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             self?.refresh()
         }
     }
 
     func refresh() {
+        guard !isRefreshing else { return }
+        isRefreshing = true
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let ports = Self.discoverPorts()
             DispatchQueue.main.async {
                 guard let self else { return }
-                let changed = self.entries.count != ports.count
-                    || zip(self.entries, ports).contains { $0.id != $1.id || $0.pid != $1.pid }
-                if changed {
-                    self.entries = ports
-                }
+                self.isRefreshing = false
+                self.entries = ports.filter { !self.recentlyKilled.contains($0.id) }
             }
         }
     }
 
     // MARK: - Actions
 
-    func killProcess(pid: Int32) {
+    func killProcess(pid: Int32, port: UInt16) {
         kill(pid, SIGTERM)
+        recentlyKilled.insert(port)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
+            self?.recentlyKilled.remove(port)
+        }
     }
 
     func removeEntry(id: UInt16) {
@@ -343,15 +352,32 @@ final class PortStore: ObservableObject {
 
         var gitRoots = [String: URL]()
         var branches = [String: String]()
+        let now = Date()
 
         for (_, cwd) in cwds {
             guard gitRoots[cwd] == nil else { continue }
             guard !isProtectedPath(cwd) else { continue }
-            if let root = findGitRoot(from: cwd) {
+
+            let root: URL?
+            if let cached = gitRootCache[cwd] {
+                root = cached
+            } else {
+                root = findGitRoot(from: cwd)
+                gitRootCache[cwd] = root
+            }
+
+            if let root {
                 gitRoots[cwd] = root
                 let rootPath = root.path
                 if branches[rootPath] == nil {
-                    branches[rootPath] = resolveGitBranch(at: rootPath)
+                    if let cached = branchCache[rootPath],
+                       now.timeIntervalSince(cached.resolved) < 30 {
+                        branches[rootPath] = cached.branch
+                    } else {
+                        let branch = resolveGitBranch(at: rootPath)
+                        branches[rootPath] = branch
+                        branchCache[rootPath] = (branch, now)
+                    }
                 }
             }
         }
@@ -417,8 +443,22 @@ final class PortStore: ObservableObject {
     }
 
     private static func resolveGitBranch(at gitRoot: String) -> String {
-        guard let output = shell("git -C '\(gitRoot)' rev-parse --abbrev-ref HEAD 2>/dev/null") else { return "" }
-        return output.trimmingCharacters(in: .whitespacesAndNewlines)
+        let process = Process()
+        let pipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = ["-C", gitRoot, "rev-parse", "--abbrev-ref", "HEAD"]
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        do { try process.run() } catch { return "" }
+
+        DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
+            if process.isRunning { process.terminate() }
+        }
+
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return "" }
+        return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     private static func isProtectedPath(_ path: String) -> Bool {
@@ -480,7 +520,6 @@ struct PortListView: View {
         }
         .frame(width: 340)
         .animation(.easeInOut(duration: 0.25), value: hasCompletedOnboarding)
-        .onAppear { store.ensurePolling() }
     }
 
     private var mainContent: some View {
@@ -525,10 +564,10 @@ struct PortListView: View {
             Image(systemName: "square.fill")
                 .font(.system(size: 24))
                 .foregroundStyle(.quaternary)
-            Text("No projects running")
+            Text("No dev servers detected")
                 .font(.callout.weight(.medium))
                 .foregroundStyle(.secondary)
-            Text("Start a dev server to see it here")
+            Text("Start a dev server in a Git project")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
@@ -624,7 +663,7 @@ struct PortRow: View {
     }
 
     private func killWithAnimation() {
-        store.killProcess(pid: entry.pid)
+        store.killProcess(pid: entry.pid, port: entry.id)
         withAnimation(.easeOut(duration: 0.3)) {
             slidOut = true
         }
