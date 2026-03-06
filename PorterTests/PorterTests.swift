@@ -20,10 +20,13 @@ struct LsofParserTests {
         #expect(parsed.count == 3)
         #expect(parsed[0].port == 3000)
         #expect(parsed[0].pid == 12345)
+        #expect(parsed[0].processName == "node")
         #expect(parsed[1].port == 5173)
         #expect(parsed[1].pid == 34567)
+        #expect(parsed[1].processName == "java")
         #expect(parsed[2].port == 8080)
         #expect(parsed[2].pid == 23456)
+        #expect(parsed[2].processName == "python3")
     }
 
     @Test func deduplicatesSamePort() {
@@ -268,6 +271,47 @@ struct GitRootTests {
     @Test func returnsNilWhenNoGitRoot() {
         let result = LivePortScanner.findGitRoot(from: "/tmp")
         #expect(result == nil)
+    }
+}
+
+// MARK: - Display Name Tests
+
+struct DisplayNameTests {
+
+    @Test func prefersGitRootName() {
+        let name = LivePortScanner.displayName(
+            processName: "beam.smp",
+            cwd: "/Users/me/work/backend",
+            gitRoot: URL(filePath: "/Users/me/work/agidb-backend")
+        )
+        #expect(name == "agidb-backend")
+    }
+
+    @Test func fallsBackToMeaningfulCwdBasename() {
+        let name = LivePortScanner.displayName(
+            processName: "beam.smp",
+            cwd: "/Users/me/work/agidb-backend",
+            gitRoot: nil
+        )
+        #expect(name == "agidb-backend")
+    }
+
+    @Test func fallsBackToProcessNameForGenericDirectory() {
+        let name = LivePortScanner.displayName(
+            processName: "beam.smp",
+            cwd: "/Users/me/work/agidb-backend/_build",
+            gitRoot: nil
+        )
+        #expect(name == "beam.smp")
+    }
+
+    @Test func fallsBackToProcessNameWithoutCwd() {
+        let name = LivePortScanner.displayName(
+            processName: "beam.smp",
+            cwd: nil,
+            gitRoot: nil
+        )
+        #expect(name == "beam.smp")
     }
 }
 

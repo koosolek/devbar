@@ -65,6 +65,7 @@ struct LivePortScanner: PortScanning {
     struct ParsedPort: Sendable {
         let port: UInt16
         let pid: Int32
+        let processName: String
     }
 
     static func parseLsofOutput(_ output: String) -> [ParsedPort] {
@@ -75,6 +76,7 @@ struct LivePortScanner: PortScanning {
         for line in lines.dropFirst() {
             let cols = line.split(separator: " ", omittingEmptySubsequences: true)
             guard cols.count >= 9 else { continue }
+            let processName = String(cols[0])
             guard let pid = Int32(cols[1]) else { continue }
 
             let nameCol = String(cols[cols.count - 2])
@@ -93,7 +95,7 @@ struct LivePortScanner: PortScanning {
             }
 
             guard seen.insert(port).inserted else { continue }
-            results.append(ParsedPort(port: port, pid: pid))
+            results.append(ParsedPort(port: port, pid: pid, processName: processName))
         }
 
         return results.sorted { $0.port < $1.port }
@@ -193,19 +195,49 @@ struct LivePortScanner: PortScanning {
         let activeRootPaths = Set(gitRoots.values.map { $0.path() })
         Self.cache.prune(activeCWDs: activeCWDs, activeRootPaths: activeRootPaths)
 
-        return parsed.compactMap { info -> ActivePort? in
-            guard let cwd = cwds[info.pid],
-                  let gitRoot = gitRoots[cwd] else { return nil }
-            let rootPath = gitRoot.path()
+        return parsed.map { info -> ActivePort in
+            let cwd = cwds[info.pid]
+            let gitRoot = cwd.flatMap { gitRoots[$0] }
+            let rootPath = gitRoot?.path()
+            let projectName = Self.displayName(
+                processName: info.processName,
+                cwd: cwd,
+                gitRoot: gitRoot
+            )
+
+            if gitRoot == nil, Log.isVerbose {
+                Log.scanner.debug("Using fallback label '\(projectName)' for PID \(info.pid) on port \(info.port)")
+            }
 
             return ActivePort(
                 port: info.port,
                 pid: info.pid,
-                projectName: gitRoot.lastPathComponent,
-                branch: branches[rootPath] ?? "",
+                projectName: projectName,
+                branch: rootPath.flatMap { branches[$0] } ?? "",
                 startTime: startTimes[info.pid]
             )
         }
+    }
+
+    static func displayName(processName: String, cwd: String?, gitRoot: URL?) -> String {
+        if let gitRoot {
+            return gitRoot.lastPathComponent
+        }
+
+        if let cwd {
+            let basename = URL(filePath: cwd).lastPathComponent
+            if isMeaningfulDirectoryName(basename) {
+                return basename
+            }
+        }
+
+        return processName
+    }
+
+    static func isMeaningfulDirectoryName(_ name: String) -> Bool {
+        guard !name.isEmpty, name != "/", !name.hasPrefix(".") else { return false }
+        let ignored = Set(["_build", "build", "tmp", "dist", "deps"])
+        return !ignored.contains(name)
     }
 
     private func resolveGitBranch(at gitRoot: String) async -> String {
