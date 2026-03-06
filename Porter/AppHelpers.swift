@@ -21,7 +21,11 @@ func moveToApplicationsIfNeeded() {
           !sourcePath.hasPrefix("/tmp/"),
           !sourcePath.contains("AppTranslocation") else { return }
 
-    let destination = "/Applications/Port Menu.app"
+    let fileManager = FileManager.default
+    let sourceURL = URL(filePath: sourcePath)
+    let destinationURL = URL(filePath: "/Applications/Port Menu.app")
+
+    guard sourceURL.standardizedFileURL != destinationURL.standardizedFileURL else { return }
 
     let alert = NSAlert()
     alert.messageText = "Move to Applications Folder?"
@@ -33,13 +37,32 @@ func moveToApplicationsIfNeeded() {
     guard alert.runModal() == .alertFirstButtonReturn else { return }
 
     do {
-        if FileManager.default.fileExists(atPath: destination) {
-            try FileManager.default.removeItem(atPath: destination)
+        let backupURL = destinationURL
+            .deletingLastPathComponent()
+            .appending(path: "Port Menu.backup-\(UUID().uuidString).app")
+        var backedUpExistingInstall = false
+
+        if fileManager.fileExists(atPath: destinationURL.path()) {
+            try fileManager.moveItem(at: destinationURL, to: backupURL)
+            backedUpExistingInstall = true
         }
-        try FileManager.default.moveItem(atPath: sourcePath, toPath: destination)
+
+        do {
+            try fileManager.moveItem(at: sourceURL, to: destinationURL)
+        } catch {
+            if backedUpExistingInstall && !fileManager.fileExists(atPath: destinationURL.path()) {
+                try? fileManager.moveItem(at: backupURL, to: destinationURL)
+            }
+            throw error
+        }
+
+        if backedUpExistingInstall {
+            try? fileManager.removeItem(at: backupURL)
+        }
+
         let task = Process()
         task.executableURL = URL(filePath: "/usr/bin/open")
-        task.arguments = [destination]
+        task.arguments = [destinationURL.path()]
         try task.run()
         NSApp.terminate(nil)
     } catch {

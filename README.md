@@ -37,6 +37,51 @@ open Porter.xcodeproj
 
 Requires Xcode 15+.
 
+## Release a signed build
+
+Port Menu supports a reproducible direct-download release flow for macOS outside the App Store.
+
+Requirements:
+
+- `Developer ID Application` certificate installed in your login keychain
+- Xcode command line tools with `xcodebuild`, `codesign`, and `xcrun`
+- a notary keychain profile created once with:
+
+```bash
+xcrun notarytool store-credentials "AC_PASSWORD" \
+  --apple-id "you@example.com" \
+  --team-id "YOUR_TEAM_ID" \
+  --password "app-specific-password"
+```
+
+Then build, sign, notarize, and staple a release archive with:
+
+```bash
+TEAM_ID="YOUR_TEAM_ID" \
+DEVELOPER_ID_APP="Developer ID Application: Your Name (TEAMID)" \
+./scripts/release-macos.sh
+```
+
+Optional environment variables:
+
+- `SCHEME` defaults to `Porter`
+- `PROJECT` defaults to `Porter.xcodeproj`
+- `APP_NAME` defaults to `Port Menu`
+- `NOTARY_PROFILE` defaults to `AC_PASSWORD`
+- `OUTPUT_DIR` defaults to `dist`
+
+The script produces:
+
+- a signed `.app`
+- a notarized `.zip`
+- a stapled app bundle ready for distribution
+
+## Testing
+
+```bash
+xcodebuild test -project "Porter.xcodeproj" -scheme "Porter" -destination "platform=macOS"
+```
+
 ## License
 
 MIT

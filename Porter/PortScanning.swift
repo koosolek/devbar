@@ -14,6 +14,7 @@ struct LivePortScanner: PortScanning {
 
     private static let branchTTL: TimeInterval = 30
     private static let cache = CacheStore()
+    private static let processTracker = ProcessTracker()
 
     func scan() async -> ScanResult {
         let start = Date()
@@ -235,24 +236,34 @@ struct LivePortScanner: PortScanning {
         timeout: TimeInterval,
         environment: [String: String]? = nil
     ) async throws -> String {
+        let command = ([executable] + args).joined(separator: " ")
+        let token = UUID()
+
         // Run the blocking process on a background thread via a detached task,
         // then race it against a timeout task using withTaskGroup.
-        try await withThrowingTaskGroup(of: String.self) { group in
+        return try await withThrowingTaskGroup(of: String.self) { group in
             group.addTask {
                 try await Self.runProcess(
-                    executable: executable, args: args, environment: environment
+                    executable: executable,
+                    args: args,
+                    environment: environment,
+                    token: token
                 )
             }
 
             group.addTask {
                 try await Task.sleep(for: .seconds(timeout))
-                Log.shell.warning("Process timed out: \(executable) \(args.joined(separator: " "))")
+                Self.processTracker.terminate(token: token)
+                Log.shell.warning("Process timed out: \(command)")
                 throw ScanError.lsofTimeout
             }
 
             // Return the first result (success or error); cancel the other task.
+            defer {
+                Self.processTracker.terminate(token: token)
+                group.cancelAll()
+            }
             let result = try await group.next()!
-            group.cancelAll()
             return result
         }
     }
@@ -260,7 +271,8 @@ struct LivePortScanner: PortScanning {
     private static func runProcess(
         executable: String,
         args: [String],
-        environment: [String: String]?
+        environment: [String: String]?,
+        token: UUID
     ) async throws -> String {
         try await withCheckedThrowingContinuation { continuation in
             let process = Process()
@@ -279,9 +291,11 @@ struct LivePortScanner: PortScanning {
             }
 
             do {
+                processTracker.store(process, for: token)
                 try process.run()
                 let data = stdout.fileHandleForReading.readDataToEndOfFile()
                 process.waitUntilExit()
+                processTracker.clear(token: token)
 
                 if process.terminationStatus != 0 {
                     let errData = stderr.fileHandleForReading.availableData
@@ -297,6 +311,7 @@ struct LivePortScanner: PortScanning {
                 let output = String(data: data, encoding: .utf8) ?? ""
                 continuation.resume(returning: output)
             } catch {
+                processTracker.clear(token: token)
                 continuation.resume(throwing: ScanError.lsofFailed(error.localizedDescription))
             }
         }
@@ -336,6 +351,32 @@ final class CacheStore: Sendable {
         _branches.withLock { cache in
             cache = cache.filter { activeRootPaths.contains($0.key) }
         }
+    }
+}
+
+final class ProcessTracker: @unchecked Sendable {
+    private let lock = NSLock()
+    private var processes: [UUID: Process] = [:]
+
+    func store(_ process: Process, for token: UUID) {
+        lock.lock()
+        processes[token] = process
+        lock.unlock()
+    }
+
+    func clear(token: UUID) {
+        lock.lock()
+        processes[token] = nil
+        lock.unlock()
+    }
+
+    func terminate(token: UUID) {
+        lock.lock()
+        let process = processes[token]
+        lock.unlock()
+
+        guard let process, process.isRunning else { return }
+        process.terminate()
     }
 }
 

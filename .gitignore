@@ -1,4 +1,5 @@
 build/
+dist/
 *.profraw
 *.xcarchive
 DerivedData/
