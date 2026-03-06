@@ -86,10 +86,13 @@ func moveToApplicationsIfNeeded() {
 private func relaunchInstalledApp(at appURL: URL) {
     do {
         let process = Process()
-        process.executableURL = URL(filePath: "/usr/bin/open")
-        process.arguments = ["-n", appURL.path()]
+        process.executableURL = URL(filePath: "/bin/sh")
+        process.arguments = [
+            "-c",
+            "sleep 0.4; open -n '\(appURL.path().replacingOccurrences(of: "'", with: "'\\''"))'"
+        ]
         try process.run()
-        exit(0)
+        NSApp.terminate(nil)
     } catch {
         Log.lifecycle.error("Failed to relaunch app from Applications: \(error.localizedDescription)")
         showApplicationsRelaunchError(error)
