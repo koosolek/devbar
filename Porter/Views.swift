@@ -52,23 +52,25 @@ struct PortHeaderView: View {
             Text("Port Menu").font(.headline)
             Spacer()
 
-            if !store.entries.isEmpty {
-                HeaderControlButton(
-                    tooltip: nil,
-                    destructive: true,
-                    action: store.killAllProcesses
-                ) {
-                    Text("Kill all")
+            HStack(spacing: 2) {
+                if !store.entries.isEmpty {
+                    HeaderControlButton(
+                        tooltip: nil,
+                        destructive: true,
+                        action: store.killAllProcesses
+                    ) {
+                        Text("Kill all")
+                    }
                 }
-            }
 
-            HeaderControlButton(
-                tooltip: "Quit Port Menu",
-                tooltipAlignment: .bottomTrailing,
-                tooltipOffset: .init(width: -4, height: 28),
-                action: { NSApplication.shared.terminate(nil) }
-            ) {
-                Image(systemName: "power")
+                HeaderControlButton(
+                    tooltip: "Quit Port Menu",
+                    tooltipAlignment: .bottomTrailing,
+                    tooltipOffset: .init(width: -4, height: 28),
+                    action: { NSApplication.shared.terminate(nil) }
+                ) {
+                    Image(systemName: "power")
+                }
             }
         }
         .padding(.horizontal, 16)
