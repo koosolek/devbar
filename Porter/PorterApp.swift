@@ -1,16 +1,23 @@
+import Sparkle
 import SwiftUI
 
 @main
 struct PorterApp: App {
     @State private var store = PortStore.shared
+    private let updaterController: SPUStandardUpdaterController
 
     init() {
+        updaterController = SPUStandardUpdaterController(
+            startingUpdater: true,
+            updaterDelegate: nil,
+            userDriverDelegate: nil
+        )
         moveToApplicationsIfNeeded()
     }
 
     var body: some Scene {
         MenuBarExtra {
-            PortListView()
+            PortListView(updater: updaterController.updater)
                 .environment(store)
         } label: {
             HStack(spacing: 3) {
@@ -25,6 +32,11 @@ struct PorterApp: App {
             .onAppear { store.ensurePolling() }
         }
         .menuBarExtraStyle(.window)
+        .commands {
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesView(updater: updaterController.updater)
+            }
+        }
     }
 
     private var statusColor: Color {

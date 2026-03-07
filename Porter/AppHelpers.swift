@@ -4,11 +4,20 @@ import os
 @MainActor
 func moveToApplicationsIfNeeded() {
     let bundlePath = Bundle.main.bundlePath
+    let destinationURL = URL(filePath: "/Applications/Port Menu.app")
+    let fileManager = FileManager.default
+
+    // If the app is already running from a translocated path but a copy already
+    // exists in /Applications, just relaunch from there silently — no dialog needed.
+    if bundlePath.contains("AppTranslocation"),
+       fileManager.fileExists(atPath: destinationURL.path()) {
+        relaunchInstalledApp(from: URL(filePath: bundlePath), to: destinationURL)
+        return
+    }
 
     var sourcePath = bundlePath
     if bundlePath.contains("AppTranslocation") {
-        let fm = FileManager.default
-        let home = fm.homeDirectoryForCurrentUser.path()
+        let home = fileManager.homeDirectoryForCurrentUser.path()
         let appName = URL(filePath: bundlePath).lastPathComponent
         let candidates = [
             "\(home)/Downloads/\(appName)",
@@ -16,7 +25,7 @@ func moveToApplicationsIfNeeded() {
             "\(home)/Documents/\(appName)",
             "\(home)/\(appName)",
         ]
-        if let real = candidates.first(where: { fm.fileExists(atPath: $0) }) {
+        if let real = candidates.first(where: { fileManager.fileExists(atPath: $0) }) {
             sourcePath = real
         }
     }
@@ -26,9 +35,7 @@ func moveToApplicationsIfNeeded() {
           !sourcePath.hasPrefix("/tmp/"),
           !sourcePath.contains("AppTranslocation") else { return }
 
-    let fileManager = FileManager.default
     let sourceURL = URL(filePath: sourcePath)
-    let destinationURL = URL(filePath: "/Applications/Port Menu.app")
 
     guard sourceURL.standardizedFileURL != destinationURL.standardizedFileURL else { return }
 

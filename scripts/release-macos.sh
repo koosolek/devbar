@@ -49,6 +49,30 @@ cp -R "${ARCHIVE_PATH}/Products/Applications/${APP_NAME}.app" "${EXPORT_APP_PATH
 echo "Verifying code signature..."
 codesign --verify --deep --strict --verbose=2 "${EXPORT_APP_PATH}"
 
+echo "Re-signing Sparkle internals with Developer ID..."
+find "${EXPORT_APP_PATH}/Contents/Frameworks/Sparkle.framework" \
+  \( -name "*.xpc" -o -name "*.app" -o -name "Autoupdate" -o -name "Updater" \) \
+  | while read -r component; do
+    codesign --force --sign "${DEVELOPER_ID_APP}" \
+      --options runtime \
+      --timestamp \
+      "${component}" 2>/dev/null || true
+  done
+codesign --force --sign "${DEVELOPER_ID_APP}" \
+  --options runtime \
+  --timestamp \
+  --deep \
+  "${EXPORT_APP_PATH}/Contents/Frameworks/Sparkle.framework"
+codesign --force --sign "${DEVELOPER_ID_APP}" \
+  --options runtime \
+  --timestamp \
+  --entitlements "${EXPORT_APP_PATH}/Contents/MacOS/Port Menu.xcent" \
+  "${EXPORT_APP_PATH}" 2>/dev/null || \
+codesign --force --sign "${DEVELOPER_ID_APP}" \
+  --options runtime \
+  --timestamp \
+  "${EXPORT_APP_PATH}"
+
 echo "Creating notarization archive..."
 /usr/bin/ditto -c -k --keepParent "${EXPORT_APP_PATH}" "${ZIP_PATH}"
 
@@ -139,6 +163,42 @@ submit_for_notarization "${DMG_PATH}"
 echo "Stapling DMG notarization ticket..."
 xcrun stapler staple "${DMG_PATH}"
 
+echo "Signing DMG with Sparkle key and updating appcast.xml..."
+SPARKLE_BIN="$(find ~/Library/Developer/Xcode/DerivedData -name 'sign_update' 2>/dev/null | head -1 | xargs dirname)"
+VERSION=$(defaults read "$(pwd)/${EXPORT_APP_PATH}/Contents/Info" CFBundleShortVersionString)
+BUILD=$(defaults read "$(pwd)/${EXPORT_APP_PATH}/Contents/Info" CFBundleVersion)
+DMG_SIZE=$(stat -f%z "${DMG_PATH}")
+DMG_FILENAME="PortMenu-${VERSION}.dmg"
+DMG_RELEASE_URL="https://github.com/wieandteduard/port-menu/releases/download/v${VERSION}/${DMG_FILENAME}"
+ED_SIGNATURE=$("${SPARKLE_BIN}/sign_update" "${DMG_PATH}" 2>/dev/null | sed 's/.*edSignature="\([^"]*\)".*/\1/')
+PUB_DATE=$(date -u "+%a, %d %b %Y %H:%M:%S +0000")
+
+cat > packaging/appcast.xml <<APPCAST
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+    <channel>
+        <title>Port Menu</title>
+        <link>https://raw.githubusercontent.com/wieandteduard/port-menu/main/packaging/appcast.xml</link>
+        <description>Port Menu release feed</description>
+        <language>en</language>
+        <item>
+            <title>Port Menu ${VERSION}</title>
+            <pubDate>${PUB_DATE}</pubDate>
+            <sparkle:version>${BUILD}</sparkle:version>
+            <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure
+                url="${DMG_RELEASE_URL}"
+                sparkle:edSignature="${ED_SIGNATURE}"
+                length="${DMG_SIZE}"
+                type="application/octet-stream"/>
+        </item>
+    </channel>
+</rss>
+APPCAST
+
 echo "Release ready:"
-echo "  App: ${EXPORT_APP_PATH}"
-echo "  DMG: ${DMG_PATH}"
+echo "  App:     ${EXPORT_APP_PATH}"
+echo "  DMG:     ${DMG_PATH}"
+echo "  Version: ${VERSION} (build ${BUILD})"
+echo "  appcast.xml updated in packaging/"

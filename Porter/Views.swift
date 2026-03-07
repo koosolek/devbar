@@ -1,16 +1,35 @@
 import ServiceManagement
+import Sparkle
 import SwiftUI
+
+// MARK: - Check for Updates
+
+struct CheckForUpdatesView: View {
+    let updater: SPUUpdater
+    @State private var canCheckForUpdates = false
+
+    var body: some View {
+        Button("Check for Updates…") {
+            updater.checkForUpdates()
+        }
+        .disabled(!canCheckForUpdates)
+        .onAppear {
+            canCheckForUpdates = updater.canCheckForUpdates
+        }
+    }
+}
 
 // MARK: - Port List
 
 struct PortListView: View {
     @Environment(PortStore.self) private var store
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    var updater: SPUUpdater
 
     var body: some View {
         Group {
             if hasCompletedOnboarding {
-                PortMainContentView()
+                PortMainContentView(updater: updater)
             } else {
                 OnboardingView()
             }
@@ -24,10 +43,11 @@ struct PortListView: View {
 
 struct PortMainContentView: View {
     @Environment(PortStore.self) private var store
+    var updater: SPUUpdater
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PortHeaderView()
+            PortHeaderView(updater: updater)
             Divider()
 
             if let error = store.lastError, store.entries.isEmpty {
@@ -50,6 +70,7 @@ struct PortHeaderView: View {
     @State private var menuHovered = false
     @State private var showMenu = false
     @State private var launchAtLoginError: String?
+    var updater: SPUUpdater
 
     private var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "–"
@@ -114,6 +135,10 @@ struct PortHeaderView: View {
                         Toggle("Launch at Login", isOn: launchAtLogin)
                             .toggleStyle(.switch)
                             .controlSize(.mini)
+
+                        Divider()
+
+                        CheckForUpdatesView(updater: updater)
                     }
                     .padding(12)
                 }

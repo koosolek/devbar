@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		8AFA1C1402DD5C099F2B5314 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = C4A7A3B33A411A93355703AD /* Sparkle */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		66D07B582F504ED400ABF2CA /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -32,16 +36,22 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		66D07B462F504ED200ABF2CA /* Porter */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = Porter;
 			sourceTree = "<group>";
 		};
 		66D07B5A2F504ED400ABF2CA /* PorterTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = PorterTests;
 			sourceTree = "<group>";
 		};
 		66D07B642F504ED400ABF2CA /* PorterUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = PorterUITests;
 			sourceTree = "<group>";
 		};
@@ -52,6 +62,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8AFA1C1402DD5C099F2B5314 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -99,20 +110,21 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 66D07B6B2F504ED400ABF2CA /* Build configuration list for PBXNativeTarget "Porter" */;
 			buildPhases = (
-		66D07B402F504ED200ABF2CA /* Sources */,
-			66D07B412F504ED200ABF2CA /* Frameworks */,
-			66D07B422F504ED200ABF2CA /* Resources */,
-			AA000001AA000001AA000001 /* Fix App Icon */,
-		);
-		buildRules = (
-		);
-		dependencies = (
-		);
-		fileSystemSynchronizedGroups = (
-			66D07B462F504ED200ABF2CA /* Porter */,
-		);
+				66D07B402F504ED200ABF2CA /* Sources */,
+				66D07B412F504ED200ABF2CA /* Frameworks */,
+				66D07B422F504ED200ABF2CA /* Resources */,
+				AA000001AA000001AA000001 /* Fix App Icon */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				66D07B462F504ED200ABF2CA /* Porter */,
+			);
 			name = Porter;
 			packageProductDependencies = (
+				C4A7A3B33A411A93355703AD /* Sparkle */,
 			);
 			productName = Porter;
 			productReference = 66D07B442F504ED200ABF2CA /* Porter.app */;
@@ -135,8 +147,6 @@
 				66D07B5A2F504ED400ABF2CA /* PorterTests */,
 			);
 			name = PorterTests;
-			packageProductDependencies = (
-			);
 			productName = PorterTests;
 			productReference = 66D07B572F504ED400ABF2CA /* PorterTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -158,8 +168,6 @@
 				66D07B642F504ED400ABF2CA /* PorterUITests */,
 			);
 			name = PorterUITests;
-			packageProductDependencies = (
-			);
 			productName = PorterUITests;
 			productReference = 66D07B612F504ED400ABF2CA /* PorterUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -196,6 +204,9 @@
 			);
 			mainGroup = 66D07B3B2F504ED200ABF2CA;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				0B7C2FF416E1BAE34CD06F02 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 66D07B452F504ED200ABF2CA /* Products */;
 			projectDirPath = "";
@@ -421,7 +432,7 @@
 				CODE_SIGN_ENTITLEMENTS = Porter/Porter.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 15;
 				DEVELOPMENT_TEAM = LU4CMSAS7X;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -430,11 +441,13 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_SUFeedURL = "https://raw.githubusercontent.com/wieandteduard/port-menu/main/packaging/appcast.xml";
+				INFOPLIST_KEY_SUPublicEDKey = "LK4bWVmtCfPxLbxLkk9GjmVEdaoiF/BATld1k6FeC9Q=";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.8.6;
+				MARKETING_VERSION = 0.8.7;
 				PRODUCT_BUNDLE_IDENTIFIER = eduard.Porter;
 				PRODUCT_NAME = "Port Menu";
 				REGISTER_APP_GROUPS = YES;
@@ -451,7 +464,7 @@
 				CODE_SIGN_ENTITLEMENTS = Porter/Porter.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 15;
 				DEVELOPMENT_TEAM = LU4CMSAS7X;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -460,11 +473,13 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_SUFeedURL = "https://raw.githubusercontent.com/wieandteduard/port-menu/main/packaging/appcast.xml";
+				INFOPLIST_KEY_SUPublicEDKey = "LK4bWVmtCfPxLbxLkk9GjmVEdaoiF/BATld1k6FeC9Q=";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.8.6;
+				MARKETING_VERSION = 0.8.7;
 				PRODUCT_BUNDLE_IDENTIFIER = eduard.Porter;
 				PRODUCT_NAME = "Port Menu";
 				REGISTER_APP_GROUPS = YES;
@@ -478,11 +493,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 15;
 				DEVELOPMENT_TEAM = LU4CMSAS7X;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.8.6;
+				MARKETING_VERSION = 0.8.7;
 				PRODUCT_BUNDLE_IDENTIFIER = eduard.PorterTests;
 				PRODUCT_NAME = PorterTests;
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -496,11 +511,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 15;
 				DEVELOPMENT_TEAM = LU4CMSAS7X;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.8.6;
+				MARKETING_VERSION = 0.8.7;
 				PRODUCT_BUNDLE_IDENTIFIER = eduard.PorterTests;
 				PRODUCT_NAME = PorterTests;
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -513,10 +528,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 15;
 				DEVELOPMENT_TEAM = LU4CMSAS7X;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.8.6;
+				MARKETING_VERSION = 0.8.7;
 				PRODUCT_BUNDLE_IDENTIFIER = eduard.PorterUITests;
 				PRODUCT_NAME = PorterUITests;
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -529,10 +544,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 15;
 				DEVELOPMENT_TEAM = LU4CMSAS7X;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.8.6;
+				MARKETING_VERSION = 0.8.7;
 				PRODUCT_BUNDLE_IDENTIFIER = eduard.PorterUITests;
 				PRODUCT_NAME = PorterUITests;
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -581,6 +596,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		0B7C2FF416E1BAE34CD06F02 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.9.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		C4A7A3B33A411A93355703AD /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0B7C2FF416E1BAE34CD06F02 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 66D07B3C2F504ED200ABF2CA /* Project object */;
 }
