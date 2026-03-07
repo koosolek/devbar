@@ -92,25 +92,19 @@ struct PortHeaderView: View {
                     tooltip: "Quit Port Menu",
                     action: { NSApplication.shared.terminate(nil) }
                 ) {
-                    Image(systemName: "power")
+                    HeaderIconLabel(systemName: "power")
                 }
 
                 Button { showMenu.toggle() } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.caption)
-                        .frame(minHeight: 14)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule().fill(Color.primary.opacity(menuHovered ? 0.08 : 0))
-                        )
-                        .foregroundStyle(.secondary)
-                        .scaleEffect(menuHovered ? 1.04 : 1)
-                        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: menuHovered)
+                    HeaderIconLabel(systemName: "ellipsis")
                 }
-                .buttonStyle(.plain)
-                .onHover { menuHovered = $0 }
+                .buttonStyle(HeaderButtonStyle(isHovered: menuHovered))
                 .background(FloatingTooltipAnchor(text: "Settings", isVisible: menuHovered && !showMenu))
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.12)) {
+                        menuHovered = hovering
+                    }
+                }
                 .popover(isPresented: $showMenu, arrowEdge: .bottom) {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Port Menu \(appVersion)")
@@ -163,6 +157,16 @@ struct HeaderControlButton<Label: View>: View {
                 isHovered = hovering
             }
         }
+    }
+}
+
+struct HeaderIconLabel: View {
+    let systemName: String
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.system(size: NSFont.preferredFont(forTextStyle: .caption1).pointSize, weight: .medium))
+            .frame(width: 12, height: 14)
     }
 }
 
