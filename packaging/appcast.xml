@@ -6,15 +6,15 @@
         <description>Port Menu release feed</description>
         <language>en</language>
         <item>
-            <title>Port Menu 0.8.7</title>
-            <pubDate>Sat, 07 Mar 2026 19:38:55 +0000</pubDate>
-            <sparkle:version>15</sparkle:version>
-            <sparkle:shortVersionString>0.8.7</sparkle:shortVersionString>
+            <title>Port Menu 0.8.8</title>
+            <pubDate>Sat, 07 Mar 2026 20:11:57 +0000</pubDate>
+            <sparkle:version>16</sparkle:version>
+            <sparkle:shortVersionString>0.8.8</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <enclosure
-                url="https://github.com/wieandteduard/port-menu/releases/download/v0.8.7/PortMenu-0.8.7.dmg"
-                sparkle:edSignature="5ib0uwwfzPv3hRs35M7N8MMK7VX/6rN3afw61Vz8HngXcpeHxe06W/wfpMqKhZ6HqcP2er/jaD/jqo7VtkAHBw=="
-                length="1586637"
+                url="https://github.com/wieandteduard/port-menu/releases/download/v0.8.8/PortMenu-0.8.8.dmg"
+                sparkle:edSignature="N/pJmgJJnzBn1PtAQAPirIAIVrfFq05rzg8r0JTOGnuuvWr+8CJtls6CAwYcCuqqUw70JG+nIjWk1X6BDLY5Cw=="
+                length="1598983"
                 type="application/octet-stream"/>
         </item>
     </channel>
