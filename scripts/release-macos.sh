@@ -14,7 +14,7 @@ STAGING_BACKGROUND_DIR="${STAGING_DIR}/.background"
 ZIP_PATH="${OUTPUT_DIR}/${APP_NAME}.zip"
 TEMP_DMG_PATH="${OUTPUT_DIR}/${APP_NAME}-temp.dmg"
 DMG_PATH="${OUTPUT_DIR}/${APP_NAME}.dmg"
-MOUNT_DIR="${OUTPUT_DIR}/dmg-mount"
+MOUNT_DIR="/Volumes/PortMenuBuild"
 BACKGROUND_SOURCE_PATH="${BACKGROUND_SOURCE_PATH:-packaging/dmg-background.tiff}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-AC_PASSWORD}"
 NOTARY_APPLE_ID="${NOTARY_APPLE_ID:-}"
@@ -112,8 +112,8 @@ hdiutil create \
   "${TEMP_DMG_PATH}"
 
 echo "Attaching temporary DMG..."
-mkdir -p "${MOUNT_DIR}"
-hdiutil attach "${TEMP_DMG_PATH}" -mountpoint "${MOUNT_DIR}" -noverify -noautoopen
+hdiutil attach "${TEMP_DMG_PATH}" -noverify -noautoopen
+sleep 2
 
 # Copy TIFF background into mounted volume for retina sharpness
 mkdir -p "${MOUNT_DIR}/.background"
@@ -158,14 +158,13 @@ end run
 ASCRIPT
 
 echo "Detaching temporary DMG..."
-hdiutil detach "${MOUNT_DIR}"
+hdiutil detach "${MOUNT_DIR}" || hdiutil detach "/Volumes/PortMenuBuild" || true
 
 echo "Creating final DMG..."
 hdiutil convert "${TEMP_DMG_PATH}" \
   -format UDZO \
   -o "${DMG_PATH}"
 rm -f "${TEMP_DMG_PATH}"
-rmdir "${MOUNT_DIR}" 2>/dev/null || true
 
 echo "Signing DMG..."
 codesign --force --sign "${DEVELOPER_ID_APP}" "${DMG_PATH}"
