@@ -80,8 +80,9 @@ ln -s /Applications "${STAGING_DIR}/Applications"
 cp "${BACKGROUND_SOURCE_PATH}" "${STAGING_BACKGROUND_DIR}/background.png"
 
 echo "Creating temporary DMG..."
+# Use a volname without spaces to avoid /Volumes mount conflicts
 hdiutil create \
-  -volname "${APP_NAME}" \
+  -volname "PortMenuBuild" \
   -srcfolder "${STAGING_DIR}" \
   -ov \
   -format UDRW \
@@ -109,8 +110,8 @@ tell application "Finder"
     set icon size of opts to 80
     set text size of opts to 12
     set background picture of opts to file ".background:background.png"
-    set position of item "${APP_NAME}.app" of container window to {130, 160}
-    set position of item "Applications" of container window to {410, 160}
+    set position of item "${APP_NAME}.app" of container window to {130, 170}
+    set position of item "Applications" of container window to {410, 170}
     close
     open
     update without registering applications
