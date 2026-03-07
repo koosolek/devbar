@@ -15,7 +15,7 @@ ZIP_PATH="${OUTPUT_DIR}/${APP_NAME}.zip"
 TEMP_DMG_PATH="${OUTPUT_DIR}/${APP_NAME}-temp.dmg"
 DMG_PATH="${OUTPUT_DIR}/${APP_NAME}.dmg"
 MOUNT_DIR="${OUTPUT_DIR}/${APP_NAME}-mount"
-BACKGROUND_SOURCE_PATH="${BACKGROUND_SOURCE_PATH:-packaging/dmg-background.png}"
+BACKGROUND_SOURCE_PATH="${BACKGROUND_SOURCE_PATH:-packaging/dmg-background.tiff}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-AC_PASSWORD}"
 NOTARY_APPLE_ID="${NOTARY_APPLE_ID:-}"
 NOTARY_PASSWORD="${NOTARY_PASSWORD:-}"
@@ -101,7 +101,6 @@ echo "Preparing DMG staging folder..."
 mkdir -p "${STAGING_BACKGROUND_DIR}"
 cp -R "${EXPORT_APP_PATH}" "${STAGING_DIR}/${APP_NAME}.app"
 ln -s /Applications "${STAGING_DIR}/Applications"
-cp "${BACKGROUND_SOURCE_PATH}" "${STAGING_BACKGROUND_DIR}/background.png"
 
 echo "Creating temporary DMG..."
 # Use a volname without spaces to avoid /Volumes mount conflicts
@@ -116,33 +115,44 @@ echo "Attaching temporary DMG..."
 mkdir -p "${MOUNT_DIR}"
 hdiutil attach "${TEMP_DMG_PATH}" -mountpoint "${MOUNT_DIR}" -noverify -noautoopen
 
+# Copy TIFF background into mounted volume for retina sharpness
+mkdir -p "${MOUNT_DIR}/.background"
+cp "${BACKGROUND_SOURCE_PATH}" "${MOUNT_DIR}/.background/background.tiff"
+BG_TIFF_PATH="${MOUNT_DIR}/.background/background.tiff"
+
 echo "Configuring Finder layout..."
-osascript <<EOF
-set dmgFolder to POSIX file "${MOUNT_DIR}" as alias
-tell application "Finder"
-  tell folder dmgFolder
-    open
-    set current view of container window to icon view
-    set toolbar visible of container window to false
-    set statusbar visible of container window to false
-    try
-      set sidebar width of container window to 0
-    end try
-    set bounds of container window to {200, 120, 740, 480}
-    set opts to the icon view options of container window
-    set arrangement of opts to not arranged
-    set icon size of opts to 80
-    set text size of opts to 12
-    set background picture of opts to file ".background:background.png"
-    set position of item "${APP_NAME}.app" of container window to {130, 170}
-    set position of item "Applications" of container window to {410, 170}
-    close
-    open
-    update without registering applications
-    delay 1
+osascript - "${MOUNT_DIR}" "${APP_NAME}" "${BG_TIFF_PATH}" <<'ASCRIPT'
+on run argv
+  set mountPath to item 1 of argv
+  set appName to item 2 of argv
+  set bgPath to item 3 of argv
+  set dmgFolder to POSIX file mountPath as alias
+  set bgFile to POSIX file bgPath
+  tell application "Finder"
+    tell folder dmgFolder
+      open
+      set current view of container window to icon view
+      set toolbar visible of container window to false
+      set statusbar visible of container window to false
+      try
+        set sidebar width of container window to 0
+      end try
+      set bounds of container window to {200, 120, 740, 480}
+      set opts to the icon view options of container window
+      set arrangement of opts to not arranged
+      set icon size of opts to 80
+      set text size of opts to 12
+      set background picture of opts to bgFile
+      set position of item (appName & ".app") of container window to {130, 170}
+      set position of item "Applications" of container window to {410, 170}
+      close
+      open
+      update without registering applications
+      delay 2
+    end tell
   end tell
-end tell
-EOF
+end run
+ASCRIPT
 
 echo "Detaching temporary DMG..."
 hdiutil detach "${MOUNT_DIR}"
