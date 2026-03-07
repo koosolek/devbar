@@ -131,6 +131,7 @@ on run argv
   tell application "Finder"
     tell folder dmgFolder
       open
+      delay 1
       set current view of container window to icon view
       set toolbar visible of container window to false
       set statusbar visible of container window to false
@@ -143,12 +144,14 @@ on run argv
       set icon size of opts to 80
       set text size of opts to 12
       set background picture of opts to bgFile
+      delay 2
       set position of item (appName & ".app") of container window to {130, 170}
       set position of item "Applications" of container window to {410, 170}
-      close
-      open
+      set background picture of opts to bgFile
+      delay 1
       update without registering applications
-      delay 2
+      delay 1
+      close
     end tell
   end tell
 end run
