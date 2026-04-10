@@ -1,15 +1,22 @@
 import Sparkle
 import SwiftUI
 
+private final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
+    func feedURLString(for updater: SPUUpdater) -> String? {
+        "https://raw.githubusercontent.com/wieandteduard/port-menu/main/packaging/appcast.xml"
+    }
+}
+
 @main
 struct PorterApp: App {
     @State private var store = PortStore.shared
     private let updaterController: SPUStandardUpdaterController
+    private let updaterDelegate = UpdaterDelegate()
 
     init() {
         updaterController = SPUStandardUpdaterController(
             startingUpdater: true,
-            updaterDelegate: nil,
+            updaterDelegate: updaterDelegate,
             userDriverDelegate: nil
         )
         moveToApplicationsIfNeeded()

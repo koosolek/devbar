@@ -346,6 +346,59 @@ struct FallbackFilterTests {
             cwd: "/Applications/Figma.app/Contents/MacOS"
         ))
     }
+
+    @Test func keepsDockerBackendTruncated() {
+        #expect(LivePortScanner.shouldKeepFallbackProcess(
+            processName: "com.docke",
+            cwd: "/"
+        ))
+    }
+
+    @Test func keepsDockerProxy() {
+        #expect(LivePortScanner.shouldKeepFallbackProcess(
+            processName: "docker-proxy",
+            cwd: "/"
+        ))
+    }
+
+    @Test func keepsVpnkit() {
+        #expect(LivePortScanner.shouldKeepFallbackProcess(
+            processName: "vpnkit-bridge",
+            cwd: "/"
+        ))
+    }
+}
+
+// MARK: - Docker Display Name Tests
+
+struct DockerDisplayNameTests {
+
+    @Test func dockerBackendShowsDocker() {
+        let name = LivePortScanner.displayName(
+            processName: "com.docke",
+            cwd: "/",
+            gitRoot: nil
+        )
+        #expect(name == "Docker")
+    }
+
+    @Test func dockerProxyShowsDocker() {
+        let name = LivePortScanner.displayName(
+            processName: "docker-pr",
+            cwd: "/",
+            gitRoot: nil
+        )
+        #expect(name == "Docker")
+    }
+
+    @Test func dockerWithGitRootPrefersGitName() {
+        let name = LivePortScanner.displayName(
+            processName: "com.docke",
+            cwd: "/Users/me/app",
+            gitRoot: URL(filePath: "/Users/me/app")
+        )
+        #expect(name == "app")
+    }
 }
 
 // MARK: - PortStore Tests

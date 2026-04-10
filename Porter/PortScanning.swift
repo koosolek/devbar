@@ -252,6 +252,10 @@ struct LivePortScanner: PortScanning {
             return gitRoot.lastPathComponent
         }
 
+        if isDockerProcess(processName) {
+            return "Docker"
+        }
+
         if let cwd {
             let basename = URL(filePath: cwd).lastPathComponent
             if isMeaningfulDirectoryName(basename) {
@@ -265,6 +269,10 @@ struct LivePortScanner: PortScanning {
     static func shouldKeepFallbackProcess(processName: String, cwd: String?) -> Bool {
         let normalized = processName.lowercased()
         if allowedFallbackProcessNames.contains(normalized) {
+            return true
+        }
+
+        if isDockerProcess(normalized) {
             return true
         }
 
@@ -282,6 +290,13 @@ struct LivePortScanner: PortScanning {
         }
 
         return false
+    }
+
+    // lsof truncates COMMAND to 9 chars by default, so
+    // "com.docker.backend" → "com.docke", "docker-proxy" → "docker-pr"
+    static func isDockerProcess(_ name: String) -> Bool {
+        let lower = name.lowercased()
+        return lower.contains("docker") || lower.hasPrefix("com.dock") || lower.hasPrefix("vpnkit")
     }
 
     static func isMeaningfulDirectoryName(_ name: String) -> Bool {
