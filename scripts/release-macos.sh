@@ -176,13 +176,14 @@ echo "Stapling DMG notarization ticket..."
 xcrun stapler staple "${DMG_PATH}"
 
 echo "Signing DMG with Sparkle key and updating appcast.xml..."
-SPARKLE_BIN="$(find ~/Library/Developer/Xcode/DerivedData -name 'sign_update' 2>/dev/null | head -1 | xargs dirname)"
-VERSION=$(defaults read "$(pwd)/${EXPORT_APP_PATH}/Contents/Info" CFBundleShortVersionString)
-BUILD=$(defaults read "$(pwd)/${EXPORT_APP_PATH}/Contents/Info" CFBundleVersion)
+SPARKLE_BIN="$(find ~/Library/Developer/Xcode/DerivedData -name 'sign_update' 2>/dev/null | grep -v old_dsa | head -1 | xargs dirname)"
+VERSION=$(defaults read "${EXPORT_APP_PATH}/Contents/Info" CFBundleShortVersionString)
+BUILD=$(defaults read "${EXPORT_APP_PATH}/Contents/Info" CFBundleVersion)
 DMG_SIZE=$(stat -f%z "${DMG_PATH}")
 DMG_FILENAME="PortMenu-${VERSION}.dmg"
 DMG_RELEASE_URL="https://github.com/wieandteduard/port-menu/releases/download/v${VERSION}/${DMG_FILENAME}"
-ED_SIGNATURE=$("${SPARKLE_BIN}/sign_update" "${DMG_PATH}" 2>/dev/null | sed 's/.*edSignature="\([^"]*\)".*/\1/')
+SPARKLE_PRIV_KEY=$(security find-generic-password -s "https://sparkle-project.org" -a "ed25519" -w 2>/dev/null)
+ED_SIGNATURE=$("${SPARKLE_BIN}/sign_update" --ed-key-file <(echo "${SPARKLE_PRIV_KEY}") "${DMG_PATH}" 2>/dev/null | sed 's/.*edSignature="\([^"]*\)".*/\1/')
 PUB_DATE=$(date -u "+%a, %d %b %Y %H:%M:%S +0000")
 
 cat > packaging/appcast.xml <<APPCAST
