@@ -15,24 +15,18 @@ struct DevBarApp: App {
                 .environment(store)
                 .environment(settings)
         } label: {
-            HStack(spacing: 3) {
-                Image(systemName: store.entries.isEmpty
-                      ? "square.fill"
-                      : "circle.fill")
-                    .font(.system(size: 5.5))
-                    .foregroundStyle(statusColor)
-                Text(store.entries.count, format: .number)
-                    .fontDesign(.monospaced)
+            let runningCount = store.projects.filter { project in
+                if case .running = store.projectStates[project.path] { return true }
+                return false
+            }.count
+            HStack(spacing: 4) {
+                Image(systemName: "server.rack")
+                if runningCount > 0 {
+                    Text("\(runningCount)")
+                }
             }
             .onAppear { store.ensurePolling() }
         }
         .menuBarExtraStyle(.window)
-    }
-
-    private var statusColor: Color {
-        if store.lastError != nil && store.entries.isEmpty {
-            return .orange
-        }
-        return store.entries.isEmpty ? .gray : .green
     }
 }
