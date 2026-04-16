@@ -43,7 +43,6 @@ struct DevBarMainView: View {
 
             Divider()
                 .padding(.vertical, 4)
-                .padding(.horizontal, 12)
 
             if !settings.hasRootFolder {
                 noFolderView
@@ -206,11 +205,11 @@ struct RunningProjectRow: View {
                 if port > 0 {
                     Text("localhost:\(port) · \(formatUptime(since: startedAt))")
                         .font(.system(size: 11))
-                        .foregroundStyle(.quaternary)
+                        .foregroundStyle(.secondary)
                 } else {
                     Text("Starting...")
                         .font(.system(size: 11))
-                        .foregroundStyle(.quaternary)
+                        .foregroundStyle(.secondary)
                 }
             }
             Spacer()
@@ -241,7 +240,7 @@ struct AvailableProjectRow: View {
                     .font(.system(size: 13, weight: .medium))
                 Text(project.relativePath)
                     .font(.system(size: 11))
-                    .foregroundStyle(.quaternary)
+                    .foregroundStyle(.secondary)
             }
             Spacer()
             HStack(spacing: 4) {
@@ -251,7 +250,6 @@ struct AvailableProjectRow: View {
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 7)
-        .opacity(0.55)
     }
 }
 
@@ -270,7 +268,7 @@ struct ErrorProjectRow: View {
                     .font(.system(size: 13, weight: .medium))
                 Text(message)
                     .font(.system(size: 11))
-                    .foregroundStyle(.quaternary)
+                    .foregroundStyle(.secondary)
             }
             Spacer()
             HStack(spacing: 4) {
@@ -297,7 +295,7 @@ struct UnmanagedPortRow: View {
                     .font(.system(size: 13, weight: .medium))
                 Text("localhost:\(entry.port)")
                     .font(.system(size: 11))
-                    .foregroundStyle(.quaternary)
+                    .foregroundStyle(.secondary)
             }
             Spacer()
             HStack(spacing: 4) {
@@ -307,7 +305,6 @@ struct UnmanagedPortRow: View {
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 7)
-        .opacity(0.55)
     }
 }
 
@@ -318,6 +315,8 @@ struct ActionButton: View {
     let tooltip: String
     let action: () -> Void
 
+    @State private var isHovered = false
+
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
@@ -325,8 +324,10 @@ struct ActionButton: View {
                 .frame(width: 26, height: 26)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.tertiary)
+        .foregroundStyle(.primary)
+        .opacity(isHovered ? 1 : 0.6)
         .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
         .help(tooltip)
     }
 }

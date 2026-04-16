@@ -11,7 +11,7 @@ struct SettingsView: View {
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Settings")
                     .font(.system(size: 13, weight: .semibold))
@@ -23,6 +23,11 @@ struct SettingsView: View {
                         .foregroundStyle(.tertiary)
                 }
             }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 2)
+
+            Divider()
+                .padding(.vertical, 4)
 
             // Root folder
             VStack(alignment: .leading, spacing: 6) {
@@ -47,6 +52,7 @@ struct SettingsView: View {
             }
 
             Divider()
+                .padding(.vertical, 4)
 
             // Editor
             VStack(alignment: .leading, spacing: 6) {
@@ -83,8 +89,8 @@ struct SettingsView: View {
                 }
             }
         }
-        .padding(16)
-        .frame(width: 280)
+        .padding(12)
+        .frame(width: 340)
         .onAppear {
             if case .custom(let cmd) = settings.selectedEditor {
                 customEditorCommand = cmd
