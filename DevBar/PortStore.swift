@@ -194,7 +194,7 @@ final class PortStore {
 
     var diagnosticsSnapshot: String {
         """
-        === Port Menu Diagnostics ===
+        === DevBar Diagnostics ===
         Ports found: \(entries.count)
         Is scanning: \(isScanning)
         Last error: \(lastError?.localizedDescription ?? "none")

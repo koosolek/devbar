@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import Port_Menu
+@testable import DevBar
 
 // MARK: - lsof Parser Tests
 
@@ -473,7 +473,7 @@ struct DockerDisplayNameTests {
     @Test @MainActor func diagnosticsSnapshot() {
         let store = PortStore(scanner: FakePortScanner(ports: [], delay: 0))
         let snapshot = store.diagnosticsSnapshot
-        #expect(snapshot.contains("Port Menu Diagnostics"))
+        #expect(snapshot.contains("DevBar Diagnostics"))
         #expect(snapshot.contains("Ports found: 0"))
     }
 }

@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "66D07B432F504ED200ABF2CA"
-               BuildableName = "Port Menu.app"
-               BlueprintName = "Porter"
-               ReferencedContainer = "container:Porter.xcodeproj">
+               BuildableName = "DevBar.app"
+               BlueprintName = "DevBar"
+               ReferencedContainer = "container:DevBar.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
          <BuildActionEntry
@@ -30,9 +30,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "66D07B562F504ED400ABF2CA"
-               BuildableName = "PorterTests.xctest"
-               BlueprintName = "PorterTests"
-               ReferencedContainer = "container:Porter.xcodeproj">
+               BuildableName = "DevBarTests.xctest"
+               BlueprintName = "DevBarTests"
+               ReferencedContainer = "container:DevBar.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -46,9 +46,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "66D07B432F504ED200ABF2CA"
-            BuildableName = "Port Menu.app"
-            BlueprintName = "Porter"
-            ReferencedContainer = "container:Porter.xcodeproj">
+            BuildableName = "DevBar.app"
+            BlueprintName = "DevBar"
+            ReferencedContainer = "container:DevBar.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
       <Testables>
@@ -58,9 +58,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "66D07B562F504ED400ABF2CA"
-               BuildableName = "PorterTests.xctest"
-               BlueprintName = "PorterTests"
-               ReferencedContainer = "container:Porter.xcodeproj">
+               BuildableName = "DevBarTests.xctest"
+               BlueprintName = "DevBarTests"
+               ReferencedContainer = "container:DevBar.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -80,9 +80,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "66D07B432F504ED200ABF2CA"
-            BuildableName = "Port Menu.app"
-            BlueprintName = "Porter"
-            ReferencedContainer = "container:Porter.xcodeproj">
+            BuildableName = "DevBar.app"
+            BlueprintName = "DevBar"
+            ReferencedContainer = "container:DevBar.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -97,9 +97,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "66D07B432F504ED200ABF2CA"
-            BuildableName = "Port Menu.app"
-            BlueprintName = "Porter"
-            ReferencedContainer = "container:Porter.xcodeproj">
+            BuildableName = "DevBar.app"
+            BlueprintName = "DevBar"
+            ReferencedContainer = "container:DevBar.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

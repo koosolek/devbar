@@ -1,35 +1,16 @@
 import ServiceManagement
-import Sparkle
 import SwiftUI
-
-// MARK: - Check for Updates
-
-struct CheckForUpdatesView: View {
-    let updater: SPUUpdater
-    @State private var canCheckForUpdates = false
-
-    var body: some View {
-        Button("Check for Updates…") {
-            updater.checkForUpdates()
-        }
-        .disabled(!canCheckForUpdates)
-        .onAppear {
-            canCheckForUpdates = updater.canCheckForUpdates
-        }
-    }
-}
 
 // MARK: - Port List
 
 struct PortListView: View {
     @Environment(PortStore.self) private var store
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
-    var updater: SPUUpdater
 
     var body: some View {
         Group {
             if hasCompletedOnboarding {
-                PortMainContentView(updater: updater)
+                PortMainContentView()
             } else {
                 OnboardingView()
             }
@@ -43,11 +24,10 @@ struct PortListView: View {
 
 struct PortMainContentView: View {
     @Environment(PortStore.self) private var store
-    var updater: SPUUpdater
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PortHeaderView(updater: updater)
+            PortHeaderView()
             Divider()
 
             if let error = store.lastError, store.entries.isEmpty {
@@ -70,7 +50,6 @@ struct PortHeaderView: View {
     @State private var menuHovered = false
     @State private var showMenu = false
     @State private var launchAtLoginError: String?
-    var updater: SPUUpdater
 
     private var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "–"
@@ -95,7 +74,7 @@ struct PortHeaderView: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Text("Port Menu").font(.headline)
+            Text("DevBar").font(.headline)
             Spacer()
 
             HStack(spacing: 2) {
@@ -110,7 +89,7 @@ struct PortHeaderView: View {
                 }
 
                 HeaderControlButton(
-                    tooltip: "Quit Port Menu",
+                    tooltip: "Quit DevBar",
                     action: { NSApplication.shared.terminate(nil) }
                 ) {
                     HeaderIconLabel(systemName: "power")
@@ -128,17 +107,13 @@ struct PortHeaderView: View {
                 }
                 .popover(isPresented: $showMenu, arrowEdge: .bottom) {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Port Menu \(appVersion)")
+                        Text("DevBar \(appVersion)")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
 
                         Toggle("Launch at Login", isOn: launchAtLogin)
                             .toggleStyle(.switch)
                             .controlSize(.mini)
-
-                        Divider()
-
-                        CheckForUpdatesView(updater: updater)
                     }
                     .padding(12)
                 }
@@ -149,7 +124,7 @@ struct PortHeaderView: View {
         .alert("Couldn't Update Launch at Login", isPresented: launchAtLoginErrorBinding) {
             Button("OK") { launchAtLoginError = nil }
         } message: {
-            Text(launchAtLoginError ?? "Port Menu couldn't change its launch-at-login setting.")
+            Text(launchAtLoginError ?? "DevBar couldn't change its launch-at-login setting.")
         }
     }
 

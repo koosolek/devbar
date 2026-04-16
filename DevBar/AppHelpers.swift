@@ -4,7 +4,7 @@ import os
 @MainActor
 func moveToApplicationsIfNeeded() {
     let bundlePath = Bundle.main.bundlePath
-    let destinationURL = URL(filePath: "/Applications/Port Menu.app")
+    let destinationURL = URL(filePath: "/Applications/DevBar.app")
     let fileManager = FileManager.default
 
     // If running from a translocated path and a copy already exists in /Applications,
@@ -45,7 +45,7 @@ func moveToApplicationsIfNeeded() {
 
     let alert = NSAlert()
     alert.messageText = "Move to Applications Folder?"
-    alert.informativeText = "Port Menu works best when run from the Applications folder."
+    alert.informativeText = "DevBar works best when run from the Applications folder."
     alert.addButton(withTitle: "Move to Applications")
     alert.addButton(withTitle: "Don't Move")
     alert.alertStyle = .informational
@@ -55,10 +55,10 @@ func moveToApplicationsIfNeeded() {
     do {
         let backupURL = destinationURL
             .deletingLastPathComponent()
-            .appending(path: "Port Menu.backup-\(UUID().uuidString).app")
+            .appending(path: "DevBar.backup-\(UUID().uuidString).app")
         let tempInstallURL = destinationURL
             .deletingLastPathComponent()
-            .appending(path: "Port Menu.install-\(UUID().uuidString).app")
+            .appending(path: "DevBar.install-\(UUID().uuidString).app")
         var backedUpExistingInstall = false
 
         defer {
@@ -68,7 +68,7 @@ func moveToApplicationsIfNeeded() {
         if fileManager.fileExists(atPath: destinationURL.path()) {
             let replaceAlert = NSAlert()
             replaceAlert.messageText = "Replace Existing Application?"
-            replaceAlert.informativeText = "A copy of Port Menu already exists in Applications. Replace it with this version?"
+            replaceAlert.informativeText = "A copy of DevBar already exists in Applications. Replace it with this version?"
             replaceAlert.addButton(withTitle: "Replace")
             replaceAlert.addButton(withTitle: "Cancel")
             replaceAlert.alertStyle = .warning
@@ -115,8 +115,8 @@ private func relaunchInstalledApp(from sourceURL: URL, to appURL: URL) {
 @MainActor
 private func showApplicationsInstallError(_ error: Error) {
     let alert = NSAlert()
-    alert.messageText = "Couldn't Install Port Menu"
-    alert.informativeText = "Port Menu could not be copied to the Applications folder.\n\n\(error.localizedDescription)"
+    alert.messageText = "Couldn't Install DevBar"
+    alert.informativeText = "DevBar could not be copied to the Applications folder.\n\n\(error.localizedDescription)"
     alert.addButton(withTitle: "OK")
     alert.alertStyle = .warning
     alert.runModal()
@@ -125,8 +125,8 @@ private func showApplicationsInstallError(_ error: Error) {
 @MainActor
 private func showApplicationsRelaunchError(_ error: Error) {
     let alert = NSAlert()
-    alert.messageText = "Installed, But Couldn't Reopen Port Menu"
-    alert.informativeText = "Port Menu was copied to the Applications folder, but it could not be reopened automatically.\n\nOpen it from Applications to continue.\n\n\(error.localizedDescription)"
+    alert.messageText = "Installed, But Couldn't Reopen DevBar"
+    alert.informativeText = "DevBar was copied to the Applications folder, but it could not be reopened automatically.\n\nOpen it from Applications to continue.\n\n\(error.localizedDescription)"
     alert.addButton(withTitle: "OK")
     alert.alertStyle = .warning
     alert.runModal()

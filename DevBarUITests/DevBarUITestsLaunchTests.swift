@@ -1,8 +1,6 @@
 //
-//  PorterUITestsLaunchTests.swift
-//  PorterUITests
-//
-//  Created by Eduard on 26.02.26.
+//  DevBarUITestsLaunchTests.swift
+//  DevBarUITests
 //
 
 import XCTest

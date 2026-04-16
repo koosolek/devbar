@@ -1,30 +1,16 @@
-import Sparkle
 import SwiftUI
 
-private final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
-    func feedURLString(for updater: SPUUpdater) -> String? {
-        "https://raw.githubusercontent.com/wieandteduard/port-menu/main/packaging/appcast.xml"
-    }
-}
-
 @main
-struct PorterApp: App {
+struct DevBarApp: App {
     @State private var store = PortStore.shared
-    private let updaterController: SPUStandardUpdaterController
-    private let updaterDelegate = UpdaterDelegate()
 
     init() {
-        updaterController = SPUStandardUpdaterController(
-            startingUpdater: true,
-            updaterDelegate: updaterDelegate,
-            userDriverDelegate: nil
-        )
         moveToApplicationsIfNeeded()
     }
 
     var body: some Scene {
         MenuBarExtra {
-            PortListView(updater: updaterController.updater)
+            PortListView()
                 .environment(store)
         } label: {
             HStack(spacing: 3) {
@@ -39,11 +25,6 @@ struct PorterApp: App {
             .onAppear { store.ensurePolling() }
         }
         .menuBarExtraStyle(.window)
-        .commands {
-            CommandGroup(after: .appInfo) {
-                CheckForUpdatesView(updater: updaterController.updater)
-            }
-        }
     }
 
     private var statusColor: Color {
