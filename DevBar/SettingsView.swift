@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Bindable var settings: SettingsStore
+    var onDone: (() -> Void)?
 
     @State private var customEditorCommand: String = ""
 
@@ -11,8 +12,17 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Settings")
-                .font(.system(size: 13, weight: .semibold))
+            HStack {
+                Text("Settings")
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+                if let onDone {
+                    Button("Done") { onDone() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                }
+            }
 
             // Root folder
             VStack(alignment: .leading, spacing: 6) {

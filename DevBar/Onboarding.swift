@@ -32,13 +32,7 @@ struct OnboardingView: View {
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
 
-                    HStack(spacing: 12) {
-                        CopyableCommand("brew install pm2")
-                        Text("or")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.tertiary)
-                        CopyableCommand("npm i -g pm2")
-                    }
+                    CopyableCommand("npm install -g pm2")
                 }
                 .padding(.horizontal, 32)
                 .padding(.bottom, 16)

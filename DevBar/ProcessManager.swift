@@ -181,7 +181,7 @@ enum ProcessManagerError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .pm2NotFound:
-            return "pm2 not found. Install with: brew install pm2"
+            return "pm2 not found. Install with: npm install -g pm2"
         case .commandFailed(let command, let exitCode):
             return "Command failed (\(exitCode)): \(command)"
         }

@@ -14,7 +14,12 @@ struct DevBarMainView: View {
             if !hasCompletedOnboarding {
                 OnboardingView(isPm2Available: store.processManager.isPm2Available)
             } else if showSettings {
-                SettingsView(settings: settings)
+                SettingsView(settings: settings, onDone: {
+                    showSettings = false
+                    if settings.hasRootFolder {
+                        store.scanProjects(rootFolder: settings.rootFolder)
+                    }
+                })
             } else {
                 projectListView
             }
