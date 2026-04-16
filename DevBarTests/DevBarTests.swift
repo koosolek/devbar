@@ -202,22 +202,22 @@ struct FakeScannerTests {
 struct UptimeFormatterTests {
 
     @Test func lessThanOneMinute() {
-        let result = formatUptime(from: Date().addingTimeInterval(-30))
+        let result = formatUptime(since: Date().addingTimeInterval(-30))
         #expect(result == "<1m")
     }
 
     @Test func minutes() {
-        let result = formatUptime(from: Date().addingTimeInterval(-300))
+        let result = formatUptime(since: Date().addingTimeInterval(-300))
         #expect(result == "5m")
     }
 
     @Test func hoursAndMinutes() {
-        let result = formatUptime(from: Date().addingTimeInterval(-3660))
+        let result = formatUptime(since: Date().addingTimeInterval(-3660))
         #expect(result == "1h 1m")
     }
 
     @Test func daysAndHours() {
-        let result = formatUptime(from: Date().addingTimeInterval(-90000))
+        let result = formatUptime(since: Date().addingTimeInterval(-90000))
         #expect(result == "1d 1h")
     }
 }
