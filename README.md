@@ -1,53 +1,41 @@
-# Port Menu
+# DevBar
 
-**localhost, organized.**
+A macOS menu bar app that manages your local dev servers. Discover projects, start and stop them without terminal windows, and open URLs with one click.
 
-A tiny macOS menu bar app that tracks your dev servers across projects.
-
-No config. No setup. It just works.
-
----
+Forked from [Port Menu](https://github.com/wieandteduard/port-menu).
 
 ## What it does
 
-Port Menu sits in your menu bar and automatically detects local development servers running on your machine. One click to see what's running, which project it belongs to, and on which port.
+DevBar sits in your menu bar and gives you control over your dev servers:
 
-- **Auto-detection** — scans for running dev servers every few seconds
-- **Project context** — shows Git repo name, current branch, port, and uptime
-- **Kill or open** — stop a server or open it in your browser directly from the menu
-- **Copy URL** — right-click to copy the localhost URL
+- **Project discovery** -- scans a root folder (e.g. `~/Code`) up to 3 levels deep for Node.js projects with a `dev` or `start` script
+- **Start / stop** -- launches servers via pm2 in the background, no terminal windows needed
+- **Running servers** -- shows project name, localhost URL, and uptime
+- **Open URL** -- click to open a running server in your browser
+- **Open in editor** -- open any project in VS Code, Cursor, Zed, or a custom editor
+- **View logs** -- check pm2 output on demand
+- **Unmanaged ports** -- also detects servers started outside the app and lets you kill them
 
-## Download
+## Requirements
 
-**[Download for macOS →](https://portmenu.dev)**
-
-Requires macOS 14 (Sonoma) or later.
-
-1. Download and open the DMG
-2. Drag `Port Menu.app` into `Applications`
-3. Open Port Menu from `Applications`
-4. Click the icon in your menu bar to get started
+- macOS 14 (Sonoma) or later
+- [pm2](https://pm2.keymetrics.io/) -- install with `npm install -g pm2`
+- Xcode 15+ (to build from source)
 
 ## Build from source
 
 ```bash
-git clone https://github.com/wieandteduard/port-menu.git
-cd Porter
-open Porter.xcodeproj
+git clone https://github.com/koosolek/devbar.git
+cd devbar
+xcodebuild -scheme DevBar -configuration Debug build CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO
 ```
 
-Requires Xcode 15+.
-
-## Release
-
-Signed and notarized macOS builds are published on the [GitHub Releases](https://github.com/wieandteduard/port-menu/releases) page.
-
-Maintainers can follow the release process in `docs/releasing.md`.
+The built app will be in `~/Library/Developer/Xcode/DerivedData/DevBar-*/Build/Products/Debug/DevBar.app`.
 
 ## Testing
 
 ```bash
-xcodebuild test -project "Porter.xcodeproj" -scheme "Porter" -destination "platform=macOS"
+xcodebuild test -scheme DevBar -destination "platform=macOS" CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO
 ```
 
 ## License
