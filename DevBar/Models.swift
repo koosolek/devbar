@@ -66,3 +66,52 @@ enum RefreshInterval: Double, CaseIterable, Sendable {
 
     static let defaultInterval: RefreshInterval = .normal
 }
+
+// MARK: - DevBar Models
+
+struct DiscoveredProject: Identifiable, Equatable, Hashable, Sendable {
+    let name: String
+    let path: String
+    let relativePath: String
+    let startCommand: String
+
+    var id: String { path }
+
+    var pm2Name: String {
+        "devbar-\(name.lowercased().replacingOccurrences(of: " ", with: "-"))"
+    }
+}
+
+enum ProjectState: Equatable, Sendable {
+    case stopped
+    case running(port: UInt16, startedAt: Date)
+    case error(message: String)
+}
+
+enum EditorOption: Equatable, Hashable, Sendable, Codable {
+    case vscode
+    case cursor
+    case zed
+    case xcode
+    case custom(String)
+
+    var command: String {
+        switch self {
+        case .vscode: return "code"
+        case .cursor: return "cursor"
+        case .zed: return "zed"
+        case .xcode: return "xed"
+        case .custom(let cmd): return cmd
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .vscode: return "VS Code"
+        case .cursor: return "Cursor"
+        case .zed: return "Zed"
+        case .xcode: return "Xcode"
+        case .custom(let cmd): return cmd
+        }
+    }
+}
