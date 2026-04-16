@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct DevBarApp: App {
     @State private var store = PortStore.shared
+    @State private var settings = SettingsStore()
 
     init() {
         moveToApplicationsIfNeeded()
@@ -10,8 +11,9 @@ struct DevBarApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            PortListView()
+            DevBarMainView()
                 .environment(store)
+                .environment(settings)
         } label: {
             HStack(spacing: 3) {
                 Image(systemName: store.entries.isEmpty
