@@ -322,10 +322,13 @@ struct ActionButton: View {
             Image(systemName: systemImage)
                 .font(.system(size: 12))
                 .frame(width: 26, height: 26)
+                .background(
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(Color.primary.opacity(isHovered ? 0.08 : 0))
+                )
         }
         .buttonStyle(.plain)
         .foregroundStyle(.primary)
-        .opacity(isHovered ? 1 : 0.6)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .help(tooltip)

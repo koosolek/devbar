@@ -16,12 +16,6 @@ struct SettingsView: View {
                 Text("Settings")
                     .font(.system(size: 13, weight: .semibold))
                 Spacer()
-                if let onDone {
-                    Button("Done") { onDone() }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
-                }
             }
             .padding(.horizontal, 4)
             .padding(.vertical, 2)
@@ -50,6 +44,8 @@ struct SettingsView: View {
                     .font(.system(size: 11))
                 }
             }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 7)
 
             Divider()
                 .padding(.vertical, 4)
@@ -88,9 +84,19 @@ struct SettingsView: View {
                     .padding(.vertical, 2)
                 }
             }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 7)
+
+            if let onDone {
+                Divider()
+                    .padding(.vertical, 4)
+
+                Button("Done") { onDone() }
+                    .font(.system(size: 11))
+                    .padding(.horizontal, 4)
+            }
         }
         .padding(12)
-        .frame(width: 340)
         .onAppear {
             if case .custom(let cmd) = settings.selectedEditor {
                 customEditorCommand = cmd
