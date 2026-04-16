@@ -13,6 +13,10 @@ final class PortStore {
     var isScanning: Bool = false
     var lastDiagnostics: ScanDiagnostics?
 
+    var projects: [DiscoveredProject] = []
+    var projectStates: [String: ProjectState] = [:]  // keyed by project path
+    var processManager = ProcessManager()
+
     @ObservationIgnored
     @AppStorage("refreshInterval") private var storedInterval: Double = RefreshInterval.defaultInterval.rawValue
 
@@ -31,6 +35,8 @@ final class PortStore {
     @ObservationIgnored private var recentlyKilled: [UInt16: Date] = [:]
     @ObservationIgnored private var sleepObserver: Any?
     @ObservationIgnored private var wakeObserver: Any?
+    @ObservationIgnored private var projectScanner = ProjectScanner()
+    @ObservationIgnored private var pendingStartPaths: Set<String> = []
 
     init(scanner: PortScanning = LivePortScanner()) {
         self.scanner = scanner
@@ -188,6 +194,84 @@ final class PortStore {
             try? await Task.sleep(for: .seconds(1.5))
             self?.ensurePolling()
         }
+    }
+
+    // MARK: - Project Management
+
+    func scanProjects(rootFolder: String) {
+        guard !rootFolder.isEmpty else {
+            projects = []
+            return
+        }
+        projects = projectScanner.scan(rootFolder: rootFolder)
+        Task { await reconcileStates() }
+    }
+
+    func startProject(_ project: DiscoveredProject) async {
+        projectStates[project.path] = .running(port: 0, startedAt: Date())
+        pendingStartPaths.insert(project.path)
+        do {
+            try await processManager.start(project: project)
+            // Poll for port to appear (up to 10 seconds)
+            for _ in 0..<20 {
+                try? await Task.sleep(for: .milliseconds(500))
+                refresh()  // trigger a port scan
+                try? await Task.sleep(for: .milliseconds(200))
+                if let port = findPortForProject(project) {
+                    projectStates[project.path] = .running(port: port, startedAt: Date())
+                    pendingStartPaths.remove(project.path)
+                    return
+                }
+            }
+            pendingStartPaths.remove(project.path)
+            projectStates[project.path] = .error(message: "Server started but no port detected")
+        } catch {
+            pendingStartPaths.remove(project.path)
+            projectStates[project.path] = .error(message: error.localizedDescription)
+        }
+    }
+
+    func stopProject(_ project: DiscoveredProject) async {
+        do {
+            try await processManager.stop(project: project)
+            projectStates[project.path] = .stopped
+        } catch {
+            projectStates[project.path] = .error(message: error.localizedDescription)
+        }
+    }
+
+    func reconcileStates() async {
+        let pm2Statuses = await processManager.status()
+        let pm2ByName = Dictionary(pm2Statuses.map { ($0.name, $0) }, uniquingKeysWith: { _, last in last })
+
+        for project in projects {
+            if pendingStartPaths.contains(project.path) { continue }
+
+            if let info = pm2ByName[project.pm2Name] {
+                if info.status == "online" {
+                    if let port = findPortForProject(project) {
+                        projectStates[project.path] = .running(port: port, startedAt: Date())
+                    } else {
+                        projectStates[project.path] = .running(port: 0, startedAt: Date())
+                    }
+                } else if info.status == "errored" {
+                    projectStates[project.path] = .error(message: "Process crashed")
+                } else {
+                    projectStates[project.path] = .stopped
+                }
+            } else {
+                if projectStates[project.path] == nil {
+                    projectStates[project.path] = .stopped
+                }
+            }
+        }
+    }
+
+    private func findPortForProject(_ project: DiscoveredProject) -> UInt16? {
+        let dirName = project.name.lowercased()
+        return entries.first { entry in
+            entry.projectName.lowercased() == dirName
+        }?.port
     }
 
     // MARK: - Diagnostics
