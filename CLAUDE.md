@@ -40,6 +40,10 @@ xcodebuild test -scheme DevBar -destination "platform=macOS" CODE_SIGN_IDENTITY=
 - **No per-project config files** — the app infers start commands from package.json. If it can't figure out the command, the project is skipped. Keeps things simple
 - **Monochrome UI** — follows system light/dark theme, no color-coded status indicators. Running vs available is communicated through section separation
 
+## Known issues
+
+- **Port conflicts when running multiple projects that share the same port** — e.g. prototypes built from the same starter template all default to port 5173 with `strictPort: true`. Fix: have DevBar auto-assign unique ports and pass them as a `PORT` env variable via pm2. Requires the starter's `vite.config.ts` to read `process.env.PORT` instead of hardcoding. See `pd-perforce-prototype-starter` repo's `apps/frontend/vite.config.ts`.
+
 ## Key files
 
 | File | Purpose |
