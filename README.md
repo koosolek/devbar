@@ -10,11 +10,13 @@ DevBar sits in your menu bar and gives you control over your dev servers:
 
 - **Project discovery** -- scans a root folder (e.g. `~/Code`) up to 3 levels deep for Node.js projects with a `dev` or `start` script
 - **Start / stop** -- launches servers via pm2 in the background, no terminal windows needed
-- **Running servers** -- shows project name, localhost URL, and uptime
+- **Running servers** -- shows project name, localhost URL, uptime, and relative path
 - **Open URL** -- click to open a running server in your browser
 - **Open in editor** -- open any project in VS Code, Cursor, Zed, or a custom editor
-- **View logs** -- check pm2 output on demand
+- **Port conflict handling** -- warns when a project's known port is already in use and offers to stop the occupant before starting (Replace)
+- **Auto-assign ports** -- injects `PORT=<free port>` into pm2 so projects that read the env var avoid collisions (toggleable in Settings)
 - **Unmanaged ports** -- also detects servers started outside the app and lets you kill them
+- **Launch at login** -- registers itself as a login item on first run (toggleable in Settings)
 
 ## Requirements
 
