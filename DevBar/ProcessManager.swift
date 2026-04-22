@@ -27,15 +27,15 @@ final class ProcessManager {
         let interpreter = parts.first ?? "npm"
         let scriptArgs = Array(parts.dropFirst())
 
-        // --min-uptime 30s means: any exit within 30s counts as a "failed"
-        // restart toward the max-restarts cap. Without it, a process that
-        // briefly limps along before crashing (e.g. Docker disappears mid-run)
-        // keeps resetting the retry counter and loops indefinitely.
+        // --max-restarts 3 limits crash loops. pm2's CLI doesn't expose
+        // --min-uptime (only available via ecosystem.config.js), so we
+        // can't tune what counts as a "stable" restart from here — retry
+        // loops for services that limp for a few seconds before crashing
+        // are best handled by the user cancelling.
         var args = ["start", interpreter,
                     "--name", project.pm2Name,
                     "--cwd", project.path,
-                    "--max-restarts", "3",
-                    "--min-uptime", "30000"]
+                    "--max-restarts", "3"]
         if !scriptArgs.isEmpty {
             args.append("--")
             args.append(contentsOf: scriptArgs)
