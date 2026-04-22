@@ -6,6 +6,7 @@ import SwiftUI
 struct DevBarMainView: View {
     @Environment(PortStore.self) private var store
     @Environment(SettingsStore.self) private var settings
+    @Environment(\.openWindow) private var openWindow
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @State private var showSettings = false
 
@@ -47,7 +48,8 @@ struct DevBarMainView: View {
 
             if !settings.hasRootFolder {
                 noFolderView
-            } else if store.projects.isEmpty && store.entries.isEmpty {
+            } else if store.projects.isEmpty &&
+                        (!settings.showUnmanagedPorts || store.entries.isEmpty) {
                 if isAnyScanActive { scanningStateView } else { emptyStateView }
             } else {
                 ScrollView(.vertical, showsIndicators: true) {
@@ -72,6 +74,40 @@ struct DevBarMainView: View {
 
     @ViewBuilder
     private var projectsList: some View {
+        let editorIcon = AppIcons.icon(forAnyBundleIdentifier: settings.selectedEditor.bundleIdentifierCandidates)
+        let browserIcon: NSImage? = {
+            if let bundleId = settings.selectedBrowser.bundleIdentifier {
+                return AppIcons.icon(forBundleIdentifier: bundleId)
+            }
+            return AppIcons.defaultBrowserIcon()
+        }()
+
+        // Classify listening entries up front so Available can skip
+        // anything already running externally.
+        let managedPorts = Set(store.projects.compactMap { project -> UInt16? in
+            if case .running(let port, _) = store.projectStates[project.path], port > 0 {
+                return port
+            }
+            return nil
+        })
+        let managedProjectNames = Set(store.projects.compactMap { project -> String? in
+            switch store.projectStates[project.path] {
+            case .running, .error: return project.name.lowercased()
+            default: return nil
+            }
+        })
+        let rootFolder = settings.rootFolder
+        let leftover = store.entries.filter { entry in
+            !managedPorts.contains(entry.port)
+                && !managedProjectNames.contains(entry.projectName.lowercased())
+        }
+        let external = leftover.filter { entry in
+            guard !rootFolder.isEmpty, let root = entry.gitRootPath else { return false }
+            return root == rootFolder || root.hasPrefix(rootFolder + "/")
+        }
+        let externallyRunningPaths = Set(external.compactMap(\.gitRootPath))
+        let dockerRunning = DockerStatus.isRunning()
+
         let running = store.projects.filter { project in
             if case .running = store.projectStates[project.path] { return true }
             return false
@@ -82,7 +118,10 @@ struct DevBarMainView: View {
         }
         let available = store.projects.filter { project in
             let state = store.projectStates[project.path]
-            return state == nil || state == .stopped
+            guard state == nil || state == .stopped else { return false }
+            // Hide from Available if already running externally
+            // (detected via matching git root path).
+            return !externallyRunningPaths.contains(project.path)
         }
 
         if !running.isEmpty {
@@ -92,11 +131,33 @@ struct DevBarMainView: View {
                         project: project,
                         port: port,
                         startedAt: startedAt,
-                        onOpenURL: { openURL(port: port) },
+                        editorIcon: editorIcon,
+                        browserIcon: browserIcon,
+                        linkablePorts: linkablePorts(excluding: port),
+                        onOpenURL: { openURL(for: project, fallbackPort: port) },
                         onOpenEditor: { settings.openInEditor(path: project.path) },
-                        onStop: { Task { await store.stopProject(project) } }
+                        onOpenLogs: { openLogsWindow(for: project) },
+                        onStop: { Task { await store.stopProject(project) } },
+                        onLinkPort: { store.setKnownPort($0, for: project) },
+                        onUnlinkPort: { store.clearKnownPort(for: project) }
                     )
                 }
+            }
+        }
+
+        // External servers — running from terminal, live alongside managed
+        // Running rows. The "external" label + missing logs button are the
+        // only things distinguishing them visually.
+        if !external.isEmpty {
+            ForEach(external) { entry in
+                ExternalProjectRow(
+                    entry: entry,
+                    editorIcon: editorIcon,
+                    browserIcon: browserIcon,
+                    onOpenURL: { openURL(port: entry.port) },
+                    onOpenEditor: { entry.gitRootPath.map { settings.openInEditor(path: $0) } },
+                    onKill: { store.killProcess(pid: entry.pid, port: entry.port) }
+                )
             }
         }
 
@@ -106,7 +167,9 @@ struct DevBarMainView: View {
                     ErrorProjectRow(
                         project: project,
                         message: message,
+                        editorIcon: editorIcon,
                         onOpenEditor: { settings.openInEditor(path: project.path) },
+                        onOpenLogs: { openLogsWindow(for: project) },
                         onRetry: { Task { await store.startProject(project, autoAssignPort: settings.autoAssignPorts) } },
                         onStop: { Task { await store.deleteProject(project) } }
                     )
@@ -115,7 +178,7 @@ struct DevBarMainView: View {
         }
 
         if !available.isEmpty {
-            if !running.isEmpty || !errored.isEmpty {
+            if !running.isEmpty || !external.isEmpty || !errored.isEmpty {
                 Divider()
                     .padding(.vertical, 4)
             }
@@ -124,6 +187,8 @@ struct DevBarMainView: View {
                 AvailableProjectRow(
                     project: project,
                     conflictPort: store.portConflict(for: project),
+                    dockerMissing: project.requiresDocker && !dockerRunning,
+                    editorIcon: editorIcon,
                     onOpenEditor: { settings.openInEditor(path: project.path) },
                     onStart: { Task { await store.startProject(project, autoAssignPort: settings.autoAssignPorts) } },
                     onReplace: { Task { await store.replaceAndStart(project, autoAssignPort: settings.autoAssignPorts) } }
@@ -131,26 +196,10 @@ struct DevBarMainView: View {
             }
         }
 
-        // Unmanaged ports — detected by lsof but not matching any known project
-        let managedPorts = Set(store.projects.compactMap { project -> UInt16? in
-            if case .running(let port, _) = store.projectStates[project.path], port > 0 {
-                return port
-            }
-            return nil
-        })
-        // In a monorepo, sub-services share the project's git root, so lsof
-        // reports them all under the same projectName. Suppress those so we
-        // don't show ghost "cds" / "app" rows alongside the managed project.
-        let managedProjectNames = Set(store.projects.compactMap { project -> String? in
-            switch store.projectStates[project.path] {
-            case .running, .error: return project.name.lowercased()
-            default: return nil
-            }
-        })
-        let unmanaged = store.entries.filter { entry in
-            !managedPorts.contains(entry.port)
-                && !managedProjectNames.contains(entry.projectName.lowercased())
-        }
+        let unmanaged = settings.showUnmanagedPorts
+            ? leftover.filter { entry in !external.contains(entry) }
+            : []
+
         if !unmanaged.isEmpty {
             Divider()
                 .padding(.vertical, 4)
@@ -158,6 +207,7 @@ struct DevBarMainView: View {
             ForEach(unmanaged) { entry in
                 UnmanagedPortRow(
                     entry: entry,
+                    browserIcon: browserIcon,
                     onOpenURL: { openURL(port: entry.port) },
                     onKill: { store.killProcess(pid: entry.pid, port: entry.port) }
                 )
@@ -204,8 +254,36 @@ struct DevBarMainView: View {
 
     private func openURL(port: UInt16) {
         if let url = URL(string: "http://localhost:\(port)") {
-            NSWorkspace.shared.open(url)
+            settings.openInBrowser(url)
         }
+    }
+
+    private func openURL(for project: DiscoveredProject, fallbackPort: UInt16) {
+        if let url = store.openURL(for: project) {
+            settings.openInBrowser(url)
+        } else {
+            openURL(port: fallbackPort)
+        }
+    }
+
+    /// Ports currently listening that the user could link to a project,
+    /// excluding the project's own currently-matched port so the menu doesn't
+    /// offer something that's already set.
+    private func linkablePorts(excluding current: UInt16) -> [ActivePort] {
+        store.entries.filter { $0.port != current || current == 0 }
+            .sorted { $0.port < $1.port }
+    }
+
+    private func openLogsWindow(for project: DiscoveredProject) {
+        let target = LogWindowTarget(
+            pm2Name: project.pm2Name,
+            projectName: project.name
+        )
+        // LSUIElement apps (menu bar only, no Dock icon) need to activate
+        // before a window will surface. Without this the WindowGroup
+        // instance is created but stays hidden behind other apps.
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        openWindow(id: "logs", value: target)
     }
 }
 
@@ -247,9 +325,15 @@ struct RunningProjectRow: View {
     let project: DiscoveredProject
     let port: UInt16
     let startedAt: Date
+    let editorIcon: NSImage?
+    let browserIcon: NSImage?
+    let linkablePorts: [ActivePort]
     let onOpenURL: () -> Void
     let onOpenEditor: () -> Void
+    let onOpenLogs: () -> Void
     let onStop: () -> Void
+    let onLinkPort: (UInt16) -> Void
+    let onUnlinkPort: () -> Void
 
     var body: some View {
         HStack {
@@ -265,9 +349,11 @@ struct RunningProjectRow: View {
             Spacer()
             HStack(spacing: 4) {
                 if port > 0 {
-                    ActionButton(systemImage: "arrow.up.forward.square", tooltip: "Open URL", action: onOpenURL)
+                    ActionButton(appIcon: browserIcon, fallbackSystem: "arrow.up.forward.square", tooltip: "Open URL", action: onOpenURL)
                 }
-                ActionButton(systemImage: "pencil", tooltip: "Open in Editor", action: onOpenEditor)
+                ActionButton(appIcon: editorIcon, fallbackSystem: "pencil", tooltip: "Open in Editor", action: onOpenEditor)
+                ActionButton(systemImage: "text.alignleft", tooltip: "View Logs", action: onOpenLogs)
+                portMenuButton
                 ActionButton(systemImage: "stop.fill", tooltip: "Stop", action: onStop)
             }
         }
@@ -275,11 +361,47 @@ struct RunningProjectRow: View {
         .padding(.vertical, 7)
     }
 
+    @ViewBuilder
+    private var portMenuButton: some View {
+        Menu {
+            if !linkablePorts.isEmpty {
+                Menu("Link port") {
+                    ForEach(linkablePorts) { entry in
+                        Button(":\(entry.port) · \(entry.projectName)") {
+                            onLinkPort(entry.port)
+                        }
+                    }
+                }
+            }
+            if port > 0 {
+                Button("Unlink port") { onUnlinkPort() }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 12))
+                .frame(width: 26, height: 26)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Port options")
+    }
+
+    /// pm2 takes up to ~10s after `start` before anything shows as bound.
+    /// After that, if pm2 still says online but we've found no port, the
+    /// process is likely running but routing through Docker/a proxy where
+    /// lsof can't tie the listener back to our process — say so instead of
+    /// pretending it's still "starting".
     private var detailText: String {
         if port > 0 {
             return "localhost:\(port) · \(formatUptime(since: startedAt)) · \(project.relativePath)"
         }
-        return "Starting... · \(project.relativePath)"
+        let elapsed = Date().timeIntervalSince(startedAt)
+        if elapsed < 15 {
+            return "Starting… · \(project.relativePath)"
+        }
+        return "Running · port unknown · right-click to link · \(project.relativePath)"
     }
 }
 
@@ -288,6 +410,8 @@ struct RunningProjectRow: View {
 struct AvailableProjectRow: View {
     let project: DiscoveredProject
     let conflictPort: UInt16?
+    let dockerMissing: Bool
+    let editorIcon: NSImage?
     let onOpenEditor: () -> Void
     let onStart: () -> Void
     let onReplace: () -> Void
@@ -300,7 +424,18 @@ struct AvailableProjectRow: View {
                 HStack(spacing: 4) {
                     Text(project.name)
                         .font(.system(size: 13, weight: .medium))
-                    if conflictPort != nil {
+                        .foregroundStyle(project.isSupported ? .primary : .secondary)
+                    if !project.isSupported {
+                        Image(systemName: "questionmark.circle")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                            .help("No dev command detected in package.json or Makefile. Open the project to configure it.")
+                    } else if dockerMissing {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .help("This project uses Docker, but the Docker daemon isn't running. Start Docker before clicking Start.")
+                    } else if conflictPort != nil {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
@@ -324,12 +459,14 @@ struct AvailableProjectRow: View {
                 )
             } else {
                 HStack(spacing: 4) {
-                    ActionButton(systemImage: "pencil", tooltip: "Open in Editor", action: onOpenEditor)
-                    ActionButton(systemImage: "play.fill", tooltip: "Start") {
-                        if conflictPort != nil {
-                            confirming = true
-                        } else {
-                            onStart()
+                    ActionButton(appIcon: editorIcon, fallbackSystem: "pencil", tooltip: "Open in Editor", action: onOpenEditor)
+                    if project.isSupported {
+                        ActionButton(systemImage: "play.fill", tooltip: "Start") {
+                            if conflictPort != nil {
+                                confirming = true
+                            } else {
+                                onStart()
+                            }
                         }
                     }
                 }
@@ -348,6 +485,12 @@ struct AvailableProjectRow: View {
         }
         if let port = conflictPort {
             return "Port \(port) busy · \(project.relativePath)"
+        }
+        if !project.isSupported {
+            return "No dev command found · \(project.relativePath)"
+        }
+        if dockerMissing {
+            return "Docker not running · \(project.relativePath)"
         }
         return project.relativePath
     }
@@ -388,7 +531,9 @@ private struct ConfirmReplaceButtons: View {
 struct ErrorProjectRow: View {
     let project: DiscoveredProject
     let message: String
+    let editorIcon: NSImage?
     let onOpenEditor: () -> Void
+    let onOpenLogs: () -> Void
     let onRetry: () -> Void
     let onStop: () -> Void
 
@@ -405,7 +550,8 @@ struct ErrorProjectRow: View {
             }
             Spacer()
             HStack(spacing: 4) {
-                ActionButton(systemImage: "pencil", tooltip: "Open in Editor", action: onOpenEditor)
+                ActionButton(appIcon: editorIcon, fallbackSystem: "pencil", tooltip: "Open in Editor", action: onOpenEditor)
+                ActionButton(systemImage: "text.alignleft", tooltip: "View Logs", action: onOpenLogs)
                 ActionButton(systemImage: "arrow.clockwise", tooltip: "Retry", action: onRetry)
                 ActionButton(systemImage: "stop.fill", tooltip: "Stop", action: onStop)
             }
@@ -417,8 +563,52 @@ struct ErrorProjectRow: View {
 
 // MARK: - Unmanaged Port Row
 
+// MARK: - External Project Row
+
+struct ExternalProjectRow: View {
+    let entry: ActivePort
+    let editorIcon: NSImage?
+    let browserIcon: NSImage?
+    let onOpenURL: () -> Void
+    let onOpenEditor: () -> Void
+    let onKill: () -> Void
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(entry.projectName)
+                    .font(.system(size: 13, weight: .medium))
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer()
+            HStack(spacing: 4) {
+                ActionButton(appIcon: browserIcon, fallbackSystem: "arrow.up.forward.square", tooltip: "Open URL", action: onOpenURL)
+                if entry.gitRootPath != nil {
+                    ActionButton(appIcon: editorIcon, fallbackSystem: "pencil", tooltip: "Open in Editor", action: onOpenEditor)
+                }
+                ActionButton(systemImage: "xmark", tooltip: "Kill", action: onKill)
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 7)
+    }
+
+    private var subtitle: String {
+        let portBit = "localhost:\(entry.port)"
+        if !entry.branch.isEmpty {
+            return "\(portBit) · \(entry.branch) · external"
+        }
+        return "\(portBit) · external"
+    }
+}
+
 struct UnmanagedPortRow: View {
     let entry: ActivePort
+    let browserIcon: NSImage?
     let onOpenURL: () -> Void
     let onKill: () -> Void
 
@@ -433,7 +623,7 @@ struct UnmanagedPortRow: View {
             }
             Spacer()
             HStack(spacing: 4) {
-                ActionButton(systemImage: "arrow.up.forward.square", tooltip: "Open URL", action: onOpenURL)
+                ActionButton(appIcon: browserIcon, fallbackSystem: "arrow.up.forward.square", tooltip: "Open URL", action: onOpenURL)
                 ActionButton(systemImage: "xmark", tooltip: "Kill", action: onKill)
             }
         }
@@ -445,16 +635,36 @@ struct UnmanagedPortRow: View {
 // MARK: - Action Button
 
 struct ActionButton: View {
-    let systemImage: String
+    enum Icon {
+        case system(String)
+        case app(NSImage, fallbackSystem: String)
+    }
+
+    let icon: Icon
     let tooltip: String
     let action: () -> Void
+
+    init(systemImage: String, tooltip: String, action: @escaping () -> Void) {
+        self.icon = .system(systemImage)
+        self.tooltip = tooltip
+        self.action = action
+    }
+
+    init(appIcon: NSImage?, fallbackSystem: String, tooltip: String, action: @escaping () -> Void) {
+        if let appIcon {
+            self.icon = .app(appIcon, fallbackSystem: fallbackSystem)
+        } else {
+            self.icon = .system(fallbackSystem)
+        }
+        self.tooltip = tooltip
+        self.action = action
+    }
 
     @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 12))
+            iconView
                 .frame(width: 26, height: 26)
                 .background(
                     RoundedRectangle(cornerRadius: 5)
@@ -466,6 +676,22 @@ struct ActionButton: View {
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .help(tooltip)
+    }
+
+    @ViewBuilder
+    private var iconView: some View {
+        switch icon {
+        case .system(let name):
+            Image(systemName: name)
+                .font(.system(size: 12))
+        case .app(let image, _):
+            Image(nsImage: image)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .saturation(0)
+                .frame(width: 18, height: 18)
+        }
     }
 }
 

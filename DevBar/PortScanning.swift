@@ -242,7 +242,8 @@ struct LivePortScanner: PortScanning {
                 pid: info.pid,
                 projectName: projectName,
                 branch: rootPath.flatMap { branches[$0] } ?? "",
-                startTime: startTimes[info.pid]
+                startTime: startTimes[info.pid],
+                gitRootPath: gitRoot?.path
             )
         }
     }

@@ -34,5 +34,21 @@ struct DevBarApp: App {
             }
         }
         .menuBarExtraStyle(.window)
+
+        // Log viewer window — one per project, addressed by pm2 name.
+        WindowGroup(id: "logs", for: LogWindowTarget.self) { $target in
+            if let target {
+                LogsView(pm2Name: target.pm2Name, projectName: target.projectName)
+                    .navigationTitle("Logs · \(target.projectName)")
+            }
+        }
+        .defaultSize(width: 760, height: 460)
     }
+}
+
+/// Small value type so we can pass both pm2 name and display name to a
+/// WindowGroup(for:) scene.
+struct LogWindowTarget: Hashable, Codable {
+    let pm2Name: String
+    let projectName: String
 }

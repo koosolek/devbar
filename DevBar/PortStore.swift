@@ -25,6 +25,12 @@ final class PortStore {
     /// something else.
     var knownPorts: [String: UInt16] = [:]
 
+    /// URLs extracted from each project's pm2 logs whose port matches a
+    /// currently-listening port. Rebuilt on each refresh; used to open
+    /// the project with its actual scheme/host (e.g. https://tenant1.cds-dev.com:8000)
+    /// rather than a hardcoded localhost.
+    var logDetectedURLs: [String: URL] = [:]
+
     @ObservationIgnored
     @AppStorage("refreshInterval") private var storedInterval: Double = RefreshInterval.defaultInterval.rawValue
 
@@ -73,6 +79,26 @@ final class PortStore {
         guard port > 0, knownPorts[projectPath] != port else { return }
         knownPorts[projectPath] = port
         persistKnownPorts()
+    }
+
+    /// User-driven port link: ties a currently-listening port to this project.
+    /// Needed for Docker-launched services where `lsof` can't attribute the
+    /// port back to our pm2 process through the process tree.
+    func setKnownPort(_ port: UInt16, for project: DiscoveredProject) {
+        knownPorts[project.path] = port
+        persistKnownPorts()
+        if case .running(_, let startedAt) = projectStates[project.path] {
+            projectStates[project.path] = .running(port: port, startedAt: startedAt)
+        }
+    }
+
+    func clearKnownPort(for project: DiscoveredProject) {
+        guard knownPorts[project.path] != nil else { return }
+        knownPorts.removeValue(forKey: project.path)
+        persistKnownPorts()
+        if case .running(_, let startedAt) = projectStates[project.path] {
+            projectStates[project.path] = .running(port: 0, startedAt: startedAt)
+        }
     }
 
     // MARK: - Polling
@@ -248,6 +274,10 @@ final class PortStore {
     }
 
     func startProject(_ project: DiscoveredProject, autoAssignPort: Bool = true) async {
+        // Defensive: the UI should hide the Start action for unsupported
+        // projects, but guard here too.
+        guard project.startCommand != nil else { return }
+
         let startTime = Date()
         projectStates[project.path] = .running(port: 0, startedAt: startTime)
         pendingStartPaths.insert(project.path)
@@ -270,9 +300,11 @@ final class PortStore {
                 try? await Task.sleep(for: .milliseconds(500))
                 refresh()
                 try? await Task.sleep(for: .milliseconds(200))
-                if let port = findPortForProject(project) {
-                    projectStates[project.path] = .running(port: port, startedAt: startTime)
-                    rememberPort(port, for: project.path)
+                if let match = findPortForProject(project) {
+                    projectStates[project.path] = .running(port: match.port, startedAt: startTime)
+                    if match.isStrong {
+                        rememberPort(match.port, for: project.path)
+                    }
                     pendingStartPaths.remove(project.path)
                     return
                 }
@@ -339,14 +371,30 @@ final class PortStore {
         let pm2Statuses = await processManager.status()
         let pm2ByName = Dictionary(pm2Statuses.map { ($0.name, $0) }, uniquingKeysWith: { _, last in last })
 
+        // Refresh log-detected URLs for projects pm2 considers online so
+        // findPortForProject can use them on the same pass.
+        let listeningPorts = Set(entries.map(\.port))
+        for project in projects {
+            let info = pm2ByName[project.pm2Name]
+            guard info?.status == "online", !listeningPorts.isEmpty else {
+                logDetectedURLs.removeValue(forKey: project.path)
+                continue
+            }
+            if let url = LogURLDetector.detectURL(forPm2Name: project.pm2Name, listeningPorts: listeningPorts) {
+                logDetectedURLs[project.path] = url
+            }
+        }
+
         for project in projects {
             if pendingStartPaths.contains(project.path) { continue }
 
             if let info = pm2ByName[project.pm2Name] {
                 if info.status == "online" {
-                    if let port = findPortForProject(project) {
-                        projectStates[project.path] = .running(port: port, startedAt: Date())
-                        rememberPort(port, for: project.path)
+                    if let match = findPortForProject(project) {
+                        projectStates[project.path] = .running(port: match.port, startedAt: Date())
+                        if match.isStrong {
+                            rememberPort(match.port, for: project.path)
+                        }
                     } else {
                         projectStates[project.path] = .running(port: 0, startedAt: Date())
                     }
@@ -402,11 +450,55 @@ final class PortStore {
         return nil
     }
 
-    private func findPortForProject(_ project: DiscoveredProject) -> UInt16? {
+    struct PortMatch {
+        let port: UInt16
+        /// True for signals where the port clearly represents the project's
+        /// primary URL (user-linked, log URL, or cwd/git-root by-name match).
+        /// False for weak heuristic matches like "one of the compose ports
+        /// happens to be listening" — those should not be persisted as
+        /// `knownPort` because they're often sidecars (Redis, etc.), not
+        /// the user-facing URL.
+        let isStrong: Bool
+    }
+
+    private func findPortForProject(_ project: DiscoveredProject) -> PortMatch? {
+        // 1. Explicit user link wins.
+        if let linked = knownPorts[project.path],
+           entries.contains(where: { $0.port == linked }) {
+            return PortMatch(port: linked, isStrong: true)
+        }
+        // 2. URL scraped from this project's pm2 logs — precise and authoritative.
+        if let detected = logDetectedURLs[project.path],
+           let port = detected.port.map(UInt16.init),
+           entries.contains(where: { $0.port == port }) {
+            return PortMatch(port: port, isStrong: true)
+        }
+        // 3. lsof attributes the listener to this project by name/git root.
         let dirName = project.name.lowercased()
-        return entries.first { entry in
-            entry.projectName.lowercased() == dirName
-        }?.port
+        if let port = entries.first(where: { $0.projectName.lowercased() == dirName })?.port {
+            return PortMatch(port: port, isStrong: true)
+        }
+        // 4. Weak: *any* compose-declared port happens to be up. Lets us
+        // show the project as running but we don't remember this — a
+        // sidecar like Redis on 6380 is a poor stand-in for the real URL.
+        if !project.composePorts.isEmpty {
+            let declared = Set(project.composePorts)
+            if let entry = entries.first(where: { declared.contains($0.port) }) {
+                return PortMatch(port: entry.port, isStrong: false)
+            }
+        }
+        return nil
+    }
+
+    /// Full URL to open for this project — prefers a URL scraped from the
+    /// project's own logs (so custom hostnames + https Just Work), falling
+    /// back to http://localhost:port when we only have a port.
+    func openURL(for project: DiscoveredProject) -> URL? {
+        if let detected = logDetectedURLs[project.path] { return detected }
+        if case .running(let port, _) = projectStates[project.path], port > 0 {
+            return URL(string: "http://localhost:\(port)")
+        }
+        return nil
     }
 
     // MARK: - Diagnostics

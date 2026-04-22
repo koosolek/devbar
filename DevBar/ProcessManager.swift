@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 struct Pm2ProcessInfo: Sendable {
@@ -19,16 +20,22 @@ final class ProcessManager {
     // MARK: - Command construction (static, testable)
 
     nonisolated static func startArguments(for project: DiscoveredProject) -> [String] {
-        let parts = project.startCommand
+        guard let command = project.startCommand else { return [] }
+        let parts = command
             .split(separator: " ", omittingEmptySubsequences: true)
             .map(String.init)
         let interpreter = parts.first ?? "npm"
         let scriptArgs = Array(parts.dropFirst())
 
+        // --min-uptime 30s means: any exit within 30s counts as a "failed"
+        // restart toward the max-restarts cap. Without it, a process that
+        // briefly limps along before crashing (e.g. Docker disappears mid-run)
+        // keeps resetting the retry counter and loops indefinitely.
         var args = ["start", interpreter,
                     "--name", project.pm2Name,
                     "--cwd", project.path,
-                    "--max-restarts", "3"]
+                    "--max-restarts", "3",
+                    "--min-uptime", "30000"]
         if !scriptArgs.isEmpty {
             args.append("--")
             args.append(contentsOf: scriptArgs)
@@ -95,16 +102,32 @@ final class ProcessManager {
     }
 
     func openLogs(project: DiscoveredProject) {
-        guard let pm2Path else { return }
+        guard let pm2Path else {
+            Log.lifecycle.error("openLogs: pm2 not found")
+            return
+        }
+        // macOS opens .command files in Terminal by default, so writing a
+        // tmp shell script and opening it gives us Terminal output without
+        // needing AppleScript (which requires Automation permission and
+        // errors with -1743 otherwise).
+        let tmpDir = FileManager.default.temporaryDirectory
+        let scriptURL = tmpDir.appendingPathComponent("devbar-logs-\(project.pm2Name).command")
         let script = """
-        tell application "Terminal"
-            do script "\(pm2Path) logs \(project.pm2Name)"
-            activate
-        end tell
+        #!/bin/bash
+        clear
+        echo "Logs: \(project.pm2Name) (Ctrl+C to exit)"
+        echo
+        exec "\(pm2Path)" logs "\(project.pm2Name)"
         """
-        if let appleScript = NSAppleScript(source: script) {
-            var error: NSDictionary?
-            appleScript.executeAndReturnError(&error)
+        do {
+            try script.write(to: scriptURL, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o755],
+                ofItemAtPath: scriptURL.path
+            )
+            NSWorkspace.shared.open(scriptURL)
+        } catch {
+            Log.lifecycle.error("openLogs failed to prepare script: \(error.localizedDescription)")
         }
     }
 

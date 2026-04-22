@@ -15,6 +15,7 @@ import Foundation
         "--name", project.pm2Name,
         "--cwd", "/Users/me/Code/frontend",
         "--max-restarts", "3",
+        "--min-uptime", "30000",
         "--", "run", "dev"
     ])
 }
@@ -32,6 +33,7 @@ import Foundation
         "--name", project.pm2Name,
         "--cwd", "/Users/me/Code/api",
         "--max-restarts", "3",
+        "--min-uptime", "30000",
         "--", "start"
     ])
 }

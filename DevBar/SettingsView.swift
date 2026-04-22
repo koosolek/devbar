@@ -91,6 +91,29 @@ struct SettingsView: View {
             Divider()
                 .padding(.vertical, 4)
 
+            // Browser
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Browser")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(BrowserOption.selectable, id: \.self) { option in
+                        BrowserRow(
+                            browser: option,
+                            isSelected: settings.selectedBrowser == option
+                        ) {
+                            settings.selectedBrowser = option
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 7)
+
+            Divider()
+                .padding(.vertical, 4)
+
             // General
             VStack(alignment: .leading, spacing: 6) {
                 Text("General")
@@ -127,17 +150,31 @@ struct SettingsView: View {
                     .font(.system(size: 10))
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
+
+                Toggle(isOn: $settings.showUnmanagedPorts) {
+                    Text("Show unmanaged ports")
+                        .font(.system(size: 12))
+                }
+                .toggleStyle(.switch)
+                .controlSize(.small)
+
+                Text("Lists every other process listening on a port — Homebrew services, Docker, and anything you started in a terminal. Useful for killing stray servers; off by default to reduce noise.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, 4)
             .padding(.vertical, 7)
 
             if let onDone {
                 Divider()
-                    .padding(.vertical, 4)
+                    .padding(.top, 10)
+                    .padding(.bottom, 4)
 
                 Button("Done") { onDone() }
                     .font(.system(size: 11))
                     .padding(.horizontal, 4)
+                    .padding(.top, 8)
             }
         }
         .padding(12)
@@ -191,5 +228,25 @@ extension EditorOption {
     var isCustom: Bool {
         if case .custom = self { return true }
         return false
+    }
+}
+
+private struct BrowserRow: View {
+    let browser: BrowserOption
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 11))
+                    .foregroundStyle(isSelected ? .primary : .tertiary)
+                Text(browser.displayName)
+                    .font(.system(size: 12))
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(.vertical, 2)
     }
 }

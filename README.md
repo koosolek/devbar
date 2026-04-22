@@ -8,15 +8,19 @@ Forked from [Port Menu](https://github.com/wieandteduard/port-menu).
 
 DevBar sits in your menu bar and gives you control over your dev servers:
 
-- **Project discovery** -- scans a root folder (e.g. `~/Code`) up to 3 levels deep for Node.js projects with a `dev` or `start` script
-- **Start / stop** -- launches servers via pm2 in the background, no terminal windows needed
-- **Running servers** -- shows project name, localhost URL, uptime, and relative path
-- **Open URL** -- click to open a running server in your browser
-- **Open in editor** -- open any project in VS Code, Cursor, Zed, or a custom editor
-- **Port conflict handling** -- warns when a project's known port is already in use and offers to stop the occupant before starting (Replace)
-- **Auto-assign ports** -- injects `PORT=<free port>` into pm2 so projects that read the env var avoid collisions (toggleable in Settings)
-- **Unmanaged ports** -- also detects servers started outside the app and lets you kill them
-- **Launch at login** -- registers itself as a login item on first run (toggleable in Settings)
+- **Project discovery** -- scans a root folder (e.g. `~/Code`) up to 3 levels deep. Detects `package.json` (dev/start scripts), `Makefile` (dev/start/run/up targets), and falls back to scanning README for common dev commands.
+- **Start / stop** -- launches servers via pm2 in the background, no terminal windows
+- **Running servers** -- shows project name, localhost URL, uptime, relative path; action buttons use real editor + browser icons
+- **Open URL** -- auto-detects the server's actual URL from pm2 logs (so a server at `https://my.dev.domain:8000/` opens there, not `localhost:8000`). Browser is configurable in Settings.
+- **Open in editor** -- VS Code, Cursor, Zed, Xcode, or a custom command
+- **In-app log viewer** -- tails `pm2` output in a dedicated window; no Terminal or Automation permissions required
+- **Port conflict handling** -- warns when a project's known port is busy and offers an inline "Replace" action that stops the occupant before starting. Knows about `--port` flags, Vite configs (monorepo-aware), and docker-compose port mappings.
+- **Manual port linking** -- right-click / ellipsis menu lets you link a listening port to a project (useful for Docker-launched services where the daemon obscures the process)
+- **External servers** -- projects started outside DevBar (from a terminal) in your root folder appear alongside DevBar-managed ones with an "external" label
+- **Auto-assign ports** -- injects `PORT=<free port>` into pm2 so projects that read the env var avoid collisions (toggle in Settings)
+- **Docker awareness** -- projects with a `docker-compose` file warn pre-start when the Docker daemon isn't running
+- **Unmanaged ports** -- optional section (toggle in Settings) lists everything else listening on your machine — Docker, Homebrew services, etc. — with a Kill button
+- **Launch at login** -- registers itself as a login item on first run (toggle in Settings)
 
 ## Requirements
 

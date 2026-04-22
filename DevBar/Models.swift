@@ -9,18 +9,30 @@ struct ActivePort: Identifiable, Equatable, Hashable, Sendable {
     let projectName: String
     let branch: String
     let startTime: Date?
+    /// Git repo root the listening process's cwd belongs to, if any. Used
+    /// to distinguish ports from projects under the user's code folder
+    /// (started outside DevBar) from system-level listeners like Docker.
+    let gitRootPath: String?
 
     var url: URL {
         URL(string: "http://localhost:\(port)")!
     }
 
-    init(port: UInt16, pid: Int32, projectName: String, branch: String, startTime: Date?) {
+    init(
+        port: UInt16,
+        pid: Int32,
+        projectName: String,
+        branch: String,
+        startTime: Date?,
+        gitRootPath: String? = nil
+    ) {
         self.id = "\(port)-\(pid)"
         self.port = port
         self.pid = pid
         self.projectName = projectName
         self.branch = branch
         self.startTime = startTime
+        self.gitRootPath = gitRootPath
     }
 }
 
@@ -73,19 +85,41 @@ struct DiscoveredProject: Identifiable, Equatable, Hashable, Sendable {
     let name: String
     let path: String
     let relativePath: String
-    let startCommand: String
+    /// `nil` means we found a project-looking folder (package.json, Makefile)
+    /// but couldn't figure out how to run it. These still show in the list,
+    /// marked with a "?" and without a Start button.
+    let startCommand: String?
     /// Port detected from an explicit `--port NNNN` flag in the dev/start
     /// script. `nil` means we couldn't infer it from package.json; callers
     /// may still know the port from a prior run.
     let expectedPort: UInt16?
+    /// Host ports declared in an adjacent docker-compose.yml, used to match
+    /// Docker-launched services back to this project when lsof only sees
+    /// them as owned by `com.docker.backend`.
+    let composePorts: [UInt16]
+    /// True when the project has a docker-compose file; we use this to
+    /// warn the user pre-start if the Docker daemon isn't available.
+    let requiresDocker: Bool
 
-    init(name: String, path: String, relativePath: String, startCommand: String, expectedPort: UInt16? = nil) {
+    init(
+        name: String,
+        path: String,
+        relativePath: String,
+        startCommand: String?,
+        expectedPort: UInt16? = nil,
+        composePorts: [UInt16] = [],
+        requiresDocker: Bool = false
+    ) {
         self.name = name
         self.path = path
         self.relativePath = relativePath
         self.startCommand = startCommand
         self.expectedPort = expectedPort
+        self.composePorts = composePorts
+        self.requiresDocker = requiresDocker
     }
+
+    var isSupported: Bool { startCommand != nil }
 
     var id: String { path }
 
@@ -137,5 +171,60 @@ enum EditorOption: Equatable, Hashable, Sendable, Codable {
         case .xcode: return "Xcode"
         case .custom(let cmd): return cmd
         }
+    }
+
+    /// Bundle identifier(s) to try when looking up the installed .app for an
+    /// icon. Cursor has shipped under several IDs; VS Code and Zed have
+    /// insider/preview variants — try them in order.
+    var bundleIdentifierCandidates: [String] {
+        switch self {
+        case .vscode: return ["com.microsoft.VSCode", "com.microsoft.VSCodeInsiders"]
+        case .cursor: return [
+            "com.todesktop.230313mzl4w4u92",  // older ToDesktop build
+            "com.anysphere.cursor",            // current Cursor 2024+
+            "com.cursor.Cursor"
+        ]
+        case .zed: return ["dev.zed.Zed", "dev.zed.Zed-Preview"]
+        case .xcode: return ["com.apple.dt.Xcode"]
+        case .custom: return []
+        }
+    }
+}
+
+enum BrowserOption: Equatable, Hashable, Sendable, Codable {
+    case system
+    case safari
+    case chrome
+    case arc
+    case firefox
+    case edge
+    case brave
+
+    var bundleIdentifier: String? {
+        switch self {
+        case .system: return nil
+        case .safari: return "com.apple.Safari"
+        case .chrome: return "com.google.Chrome"
+        case .arc: return "company.thebrowser.Browser"
+        case .firefox: return "org.mozilla.firefox"
+        case .edge: return "com.microsoft.edgemac"
+        case .brave: return "com.brave.Browser"
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .system: return "System default"
+        case .safari: return "Safari"
+        case .chrome: return "Chrome"
+        case .arc: return "Arc"
+        case .firefox: return "Firefox"
+        case .edge: return "Edge"
+        case .brave: return "Brave"
+        }
+    }
+
+    static var selectable: [BrowserOption] {
+        [.system, .safari, .chrome, .arc, .firefox, .edge, .brave]
     }
 }
