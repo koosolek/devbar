@@ -6,9 +6,6 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-/* End PBXBuildFile section */
-
 /* Begin PBXContainerItemProxy section */
 		66D07B582F504ED400ABF2CA /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -35,22 +32,16 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		66D07B462F504ED200ABF2CA /* DevBar */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = DevBar;
 			sourceTree = "<group>";
 		};
 		66D07B5A2F504ED400ABF2CA /* DevBarTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = DevBarTests;
 			sourceTree = "<group>";
 		};
 		66D07B642F504ED400ABF2CA /* DevBarUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = DevBarUITests;
 			sourceTree = "<group>";
 		};
@@ -176,8 +167,8 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1640;
-				LastUpgradeCheck = 1640;
+				LastSwiftUpdateCheck = 2640;
+				LastUpgradeCheck = 2640;
 				TargetAttributes = {
 					66D07B432F504ED200ABF2CA = {
 						CreatedOnToolsVersion = 16.4;
@@ -588,8 +579,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
-
 	};
 	rootObject = 66D07B3C2F504ED200ABF2CA /* Project object */;
 }

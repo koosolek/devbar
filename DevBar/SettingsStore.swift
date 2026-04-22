@@ -5,6 +5,7 @@ import SwiftUI
 final class SettingsStore {
     @ObservationIgnored @AppStorage("rootFolder") private var _rootFolder: String = ""
     @ObservationIgnored @AppStorage("editorCommand") private var _editorCommand: String = "code"
+    @ObservationIgnored @AppStorage("autoAssignPorts") private var _autoAssignPorts: Bool = true
 
     var rootFolder: String {
         get {
@@ -26,6 +27,18 @@ final class SettingsStore {
         set {
             withMutation(keyPath: \.editorCommand) {
                 _editorCommand = newValue
+            }
+        }
+    }
+
+    var autoAssignPorts: Bool {
+        get {
+            access(keyPath: \.autoAssignPorts)
+            return _autoAssignPorts
+        }
+        set {
+            withMutation(keyPath: \.autoAssignPorts) {
+                _autoAssignPorts = newValue
             }
         }
     }

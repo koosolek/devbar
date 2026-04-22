@@ -7,6 +7,7 @@ struct DevBarApp: App {
 
     init() {
         moveToApplicationsIfNeeded()
+        LaunchAtLogin.ensureRegisteredByDefault()
     }
 
     var body: some Scene {
@@ -25,7 +26,12 @@ struct DevBarApp: App {
                     Text("\(runningCount)")
                 }
             }
-            .onAppear { store.ensurePolling() }
+            .onAppear {
+                store.ensurePolling()
+                if settings.hasRootFolder {
+                    store.scanProjects(rootFolder: settings.rootFolder)
+                }
+            }
         }
         .menuBarExtraStyle(.window)
     }

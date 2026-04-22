@@ -17,6 +17,9 @@ struct ProjectScanner: Sendable {
         results: inout [DiscoveredProject]
     ) {
         guard depth <= Self.maxDepth else { return }
+        // Never descend into system or other-app directories — they're not
+        // dev projects and reading inside them triggers macOS TCC prompts.
+        if LivePortScanner.isProtectedSystemPath(url.path()) { return }
 
         let packageJsonURL = url.appendingPathComponent("package.json")
         if let project = parsePackageJson(at: packageJsonURL, projectURL: url, rootURL: rootURL) {
@@ -51,10 +54,13 @@ struct ProjectScanner: Sendable {
         }
 
         let startCommand: String
-        if scripts["dev"] != nil {
+        let scriptBody: String
+        if let dev = scripts["dev"] {
             startCommand = "npm run dev"
-        } else if scripts["start"] != nil {
+            scriptBody = dev
+        } else if let start = scripts["start"] {
             startCommand = "npm start"
+            scriptBody = start
         } else {
             return nil
         }
@@ -68,7 +74,21 @@ struct ProjectScanner: Sendable {
             name: name,
             path: resolvedProject.path,
             relativePath: relativePath,
-            startCommand: startCommand
+            startCommand: startCommand,
+            expectedPort: Self.extractPort(from: scriptBody)
         )
+    }
+
+    /// Best-effort: look for `--port 5173` or `--port=5173` in a script body.
+    /// Config-file inference (vite.config.ts etc.) is intentionally skipped —
+    /// it's fragile across tooling versions. Combined with the last-known-port
+    /// cache this covers enough ground to catch common collisions.
+    static func extractPort(from script: String) -> UInt16? {
+        guard let range = script.range(
+            of: #"--port[=\s]+(\d+)"#,
+            options: .regularExpression
+        ) else { return nil }
+        let digits = script[range].drop(while: { !$0.isNumber })
+        return UInt16(digits)
     }
 }

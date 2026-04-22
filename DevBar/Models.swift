@@ -74,11 +74,35 @@ struct DiscoveredProject: Identifiable, Equatable, Hashable, Sendable {
     let path: String
     let relativePath: String
     let startCommand: String
+    /// Port detected from an explicit `--port NNNN` flag in the dev/start
+    /// script. `nil` means we couldn't infer it from package.json; callers
+    /// may still know the port from a prior run.
+    let expectedPort: UInt16?
+
+    init(name: String, path: String, relativePath: String, startCommand: String, expectedPort: UInt16? = nil) {
+        self.name = name
+        self.path = path
+        self.relativePath = relativePath
+        self.startCommand = startCommand
+        self.expectedPort = expectedPort
+    }
 
     var id: String { path }
 
     var pm2Name: String {
-        "devbar-\(name.lowercased().replacingOccurrences(of: " ", with: "-"))"
+        let slug = name.lowercased().replacingOccurrences(of: " ", with: "-")
+        return "devbar-\(slug)-\(Self.stableSuffix(for: path))"
+    }
+
+    /// Short, deterministic hex suffix derived from the project path.
+    /// Ensures two projects that share the same name (e.g. nested
+    /// monorepos both called "cds") still get distinct pm2 process names.
+    static func stableSuffix(for path: String) -> String {
+        var h: UInt64 = 5381
+        for byte in path.utf8 {
+            h = (h &* 33) &+ UInt64(byte)
+        }
+        return String(format: "%04x", UInt16(truncatingIfNeeded: h))
     }
 }
 

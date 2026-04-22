@@ -16,6 +16,14 @@ final class PortStore {
     var projects: [DiscoveredProject] = []
     var projectStates: [String: ProjectState] = [:]  // keyed by project path
     var processManager = ProcessManager()
+    /// True while the project-folder filesystem scan is running.
+    var isScanningProjects: Bool = false
+
+    /// Last port we observed each project binding to, keyed by project path.
+    /// Used (together with `DiscoveredProject.expectedPort`) to surface
+    /// conflicts for stopped projects whose port is currently held by
+    /// something else.
+    var knownPorts: [String: UInt16] = [:]
 
     @ObservationIgnored
     @AppStorage("refreshInterval") private var storedInterval: Double = RefreshInterval.defaultInterval.rawValue
@@ -36,12 +44,35 @@ final class PortStore {
     @ObservationIgnored private var sleepObserver: Any?
     @ObservationIgnored private var wakeObserver: Any?
     @ObservationIgnored private var projectScanner = ProjectScanner()
-    @ObservationIgnored private var pendingStartPaths: Set<String> = []
+    /// Project paths that have clicked Start but haven't confirmed a port yet.
+    /// Observable so views can react to simultaneous-start races.
+    private var pendingStartPaths: Set<String> = []
+    @ObservationIgnored private let knownPortsDefaultsKey = "knownPorts"
 
     init(scanner: PortScanning = LivePortScanner()) {
         self.scanner = scanner
+        knownPorts = Self.loadKnownPorts(key: knownPortsDefaultsKey)
         setupLifecycleObservers()
         Log.lifecycle.info("PortStore initialized")
+    }
+
+    private static func loadKnownPorts(key: String) -> [String: UInt16] {
+        guard let data = UserDefaults.standard.data(forKey: key),
+              let raw = try? JSONDecoder().decode([String: UInt16].self, from: data)
+        else { return [:] }
+        return raw
+    }
+
+    private func persistKnownPorts() {
+        if let data = try? JSONEncoder().encode(knownPorts) {
+            UserDefaults.standard.set(data, forKey: knownPortsDefaultsKey)
+        }
+    }
+
+    private func rememberPort(_ port: UInt16, for projectPath: String) {
+        guard port > 0, knownPorts[projectPath] != port else { return }
+        knownPorts[projectPath] = port
+        persistKnownPorts()
     }
 
     // MARK: - Polling
@@ -92,6 +123,9 @@ final class PortStore {
                 pruneRecentlyKilled()
                 let filtered = ports.filter { !recentlyKilled.keys.contains($0.port) }
                 applyUpdate(filtered)
+                if !projects.isEmpty {
+                    await reconcileStates()
+                }
 
             case .failure(let error, _):
                 lastError = error
@@ -199,32 +233,51 @@ final class PortStore {
     // MARK: - Project Management
 
     func scanProjects(rootFolder: String) {
+        Log.store.info("scanProjects called (rootFolder='\(rootFolder)')")
         guard !rootFolder.isEmpty else {
             projects = []
             return
         }
-        projects = projectScanner.scan(rootFolder: rootFolder)
+        // Filesystem scan is fast; keep it synchronous so the UI shows
+        // projects on the first paint. The slow part is the port scan,
+        // which already runs asynchronously.
+        let found = projectScanner.scan(rootFolder: rootFolder)
+        Log.store.info("scanProjects: found \(found.count) project(s)")
+        projects = found
         Task { await reconcileStates() }
     }
 
-    func startProject(_ project: DiscoveredProject) async {
-        projectStates[project.path] = .running(port: 0, startedAt: Date())
+    func startProject(_ project: DiscoveredProject, autoAssignPort: Bool = true) async {
+        let startTime = Date()
+        projectStates[project.path] = .running(port: 0, startedAt: startTime)
         pendingStartPaths.insert(project.path)
+
+        var env: [String: String] = [:]
+        if autoAssignPort {
+            let occupied = Set(entries.map(\.port))
+            if let allocated = PortAllocator.allocate(occupied: occupied) {
+                env["PORT"] = String(allocated)
+            }
+        }
+
         do {
-            try await processManager.start(project: project)
-            // Poll for port to appear (up to 10 seconds)
+            try await processManager.start(project: project, extraEnv: env)
+            // Poll for a port to appear (up to 10s). If none shows up we leave
+            // the project in its current running-without-port state and let the
+            // regular refresh/reconcile cycle take over — pm2 status will
+            // eventually flip it to errored/stopped if the process bails.
             for _ in 0..<20 {
                 try? await Task.sleep(for: .milliseconds(500))
-                refresh()  // trigger a port scan
+                refresh()
                 try? await Task.sleep(for: .milliseconds(200))
                 if let port = findPortForProject(project) {
-                    projectStates[project.path] = .running(port: port, startedAt: Date())
+                    projectStates[project.path] = .running(port: port, startedAt: startTime)
+                    rememberPort(port, for: project.path)
                     pendingStartPaths.remove(project.path)
                     return
                 }
             }
             pendingStartPaths.remove(project.path)
-            projectStates[project.path] = .error(message: "Server started but no port detected")
         } catch {
             pendingStartPaths.remove(project.path)
             projectStates[project.path] = .error(message: error.localizedDescription)
@@ -240,6 +293,48 @@ final class PortStore {
         }
     }
 
+    /// Fully remove the project from pm2 and transition back to Available.
+    /// Used for errored/stuck rows where a plain `stop` would leave a pm2 entry behind.
+    func deleteProject(_ project: DiscoveredProject) async {
+        pendingStartPaths.remove(project.path)
+        try? await processManager.delete(project: project)
+        projectStates[project.path] = .stopped
+    }
+
+    /// Stop whatever is listening on this project's probable port, then start it.
+    /// Used when the user explicitly confirms "kill the occupant and run this".
+    func replaceAndStart(_ project: DiscoveredProject, autoAssignPort: Bool) async {
+        guard let port = portConflict(for: project) else {
+            await startProject(project, autoAssignPort: autoAssignPort)
+            return
+        }
+
+        // Prefer stopping a managed DevBar project (running or mid-start) so
+        // pm2's view and ours stay consistent. Fall back to SIGTERM on the
+        // raw PID for external listeners.
+        let managedRunning = projects.first { candidate in
+            if case .running(let p, _) = projectStates[candidate.path], p == port { return true }
+            return false
+        }
+        let managedPending = projects.first { candidate in
+            candidate.path != project.path
+                && pendingStartPaths.contains(candidate.path)
+                && probablePort(for: candidate) == port
+        }
+
+        if let managedRunning {
+            await stopProject(managedRunning)
+        } else if let managedPending {
+            await deleteProject(managedPending)
+        } else if let entry = entries.first(where: { $0.port == port }) {
+            killProcess(pid: entry.pid, port: entry.port)
+        }
+
+        // Small grace period for the kernel to release the port.
+        try? await Task.sleep(for: .milliseconds(500))
+        await startProject(project, autoAssignPort: autoAssignPort)
+    }
+
     func reconcileStates() async {
         let pm2Statuses = await processManager.status()
         let pm2ByName = Dictionary(pm2Statuses.map { ($0.name, $0) }, uniquingKeysWith: { _, last in last })
@@ -251,6 +346,7 @@ final class PortStore {
                 if info.status == "online" {
                     if let port = findPortForProject(project) {
                         projectStates[project.path] = .running(port: port, startedAt: Date())
+                        rememberPort(port, for: project.path)
                     } else {
                         projectStates[project.path] = .running(port: 0, startedAt: Date())
                     }
@@ -265,6 +361,45 @@ final class PortStore {
                 }
             }
         }
+    }
+
+    /// Returns the port this project would likely try to bind, derived from
+    /// (1) the last-known port if we've seen it run, or (2) `--port N` in
+    /// the project's dev/start script.
+    func probablePort(for project: DiscoveredProject) -> UInt16? {
+        knownPorts[project.path] ?? project.expectedPort
+    }
+
+    /// If the project's probable port is currently being used by a process
+    /// OTHER than this same project, return that port. Otherwise nil.
+    /// Covers: live listeners (lsof), other DevBar projects already running
+    /// on the port, and other DevBar projects mid-start that will try to
+    /// claim the same port.
+    func portConflict(for project: DiscoveredProject) -> UInt16? {
+        guard let port = probablePort(for: project) else { return nil }
+
+        // If the matching state is this project's own running/starting instance,
+        // it's not a conflict.
+        if case .running(let ownPort, _) = projectStates[project.path],
+           ownPort == port || ownPort == 0 && pendingStartPaths.contains(project.path) {
+            return nil
+        }
+
+        // 1. Something is already listening on the port.
+        if entries.contains(where: { $0.port == port }) {
+            return port
+        }
+
+        // 2. Another project is in the middle of starting and will try to
+        //    bind this same port.
+        let racing = projects.contains { other in
+            other.path != project.path
+                && pendingStartPaths.contains(other.path)
+                && probablePort(for: other) == port
+        }
+        if racing { return port }
+
+        return nil
     }
 
     private func findPortForProject(_ project: DiscoveredProject) -> UInt16? {

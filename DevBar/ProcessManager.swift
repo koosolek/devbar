@@ -19,13 +19,29 @@ final class ProcessManager {
     // MARK: - Command construction (static, testable)
 
     nonisolated static func startArguments(for project: DiscoveredProject) -> [String] {
-        ["start", project.startCommand,
-         "--name", project.pm2Name,
-         "--cwd", project.path]
+        let parts = project.startCommand
+            .split(separator: " ", omittingEmptySubsequences: true)
+            .map(String.init)
+        let interpreter = parts.first ?? "npm"
+        let scriptArgs = Array(parts.dropFirst())
+
+        var args = ["start", interpreter,
+                    "--name", project.pm2Name,
+                    "--cwd", project.path,
+                    "--max-restarts", "3"]
+        if !scriptArgs.isEmpty {
+            args.append("--")
+            args.append(contentsOf: scriptArgs)
+        }
+        return args
     }
 
     nonisolated static func stopArguments(for project: DiscoveredProject) -> [String] {
         ["stop", project.pm2Name]
+    }
+
+    nonisolated static func deleteArguments(for project: DiscoveredProject) -> [String] {
+        ["delete", project.pm2Name]
     }
 
     nonisolated static func findPm2Path() -> String? {
@@ -49,15 +65,24 @@ final class ProcessManager {
 
     // MARK: - Actions
 
-    func start(project: DiscoveredProject) async throws {
+    func start(project: DiscoveredProject, extraEnv: [String: String] = [:]) async throws {
         guard let pm2Path else { throw ProcessManagerError.pm2NotFound }
+        // Clean up any stale entry for this name so we never end up with duplicates
+        // or inherit a stuck "errored" state from a previous run.
+        try? await run(command: pm2Path, arguments: Self.deleteArguments(for: project))
         let args = Self.startArguments(for: project)
-        try await run(command: pm2Path, arguments: args)
+        try await run(command: pm2Path, arguments: args, extraEnv: extraEnv)
     }
 
     func stop(project: DiscoveredProject) async throws {
         guard let pm2Path else { throw ProcessManagerError.pm2NotFound }
         let args = Self.stopArguments(for: project)
+        try await run(command: pm2Path, arguments: args)
+    }
+
+    func delete(project: DiscoveredProject) async throws {
+        guard let pm2Path else { throw ProcessManagerError.pm2NotFound }
+        let args = Self.deleteArguments(for: project)
         try await run(command: pm2Path, arguments: args)
     }
 
@@ -102,12 +127,14 @@ final class ProcessManager {
 
     // MARK: - Shell execution
 
-    private func run(command: String, arguments: [String]) async throws {
+    private func run(command: String, arguments: [String], extraEnv: [String: String] = [:]) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             let process = Process()
             process.executableURL = URL(fileURLWithPath: command)
             process.arguments = arguments
-            process.environment = Self.shellEnvironment()
+            var env = Self.shellEnvironment()
+            for (k, v) in extraEnv { env[k] = v }
+            process.environment = env
             process.terminationHandler = { proc in
                 if proc.terminationStatus == 0 {
                     continuation.resume()

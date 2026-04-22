@@ -5,6 +5,7 @@ struct SettingsView: View {
     var onDone: (() -> Void)?
 
     @State private var customEditorCommand: String = ""
+    @State private var launchAtLogin: Bool = LaunchAtLogin.isEnabled
 
     private let builtInEditors: [EditorOption] = [
         .vscode, .cursor, .zed, .xcode
@@ -83,6 +84,49 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 2)
                 }
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 7)
+
+            Divider()
+                .padding(.vertical, 4)
+
+            // General
+            VStack(alignment: .leading, spacing: 6) {
+                Text("General")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+
+                Toggle(isOn: $launchAtLogin) {
+                    Text("Launch at login")
+                        .font(.system(size: 12))
+                }
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .disabled(!LaunchAtLogin.isSupportedInCurrentLocation)
+                .onChange(of: launchAtLogin) { _, newValue in
+                    LaunchAtLogin.setEnabled(newValue)
+                    // Re-read actual state in case the system refused the change.
+                    launchAtLogin = LaunchAtLogin.isEnabled
+                }
+
+                if !LaunchAtLogin.isSupportedInCurrentLocation {
+                    Text("Move DevBar to Applications to enable.")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
+
+                Toggle(isOn: $settings.autoAssignPorts) {
+                    Text("Auto-assign ports")
+                        .font(.system(size: 12))
+                }
+                .toggleStyle(.switch)
+                .controlSize(.small)
+
+                Text("Sets PORT=4100… so projects that respect it don't collide. Configs with hardcoded ports (e.g. Vite `strictPort: true`) still need a code change.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, 4)
             .padding(.vertical, 7)

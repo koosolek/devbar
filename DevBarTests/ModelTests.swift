@@ -11,7 +11,8 @@ import Foundation
     )
     #expect(project.name == "frontend")
     #expect(project.relativePath == "Personal/frontend")
-    #expect(project.pm2Name == "devbar-frontend")
+    #expect(project.pm2Name.hasPrefix("devbar-frontend-"))
+    #expect(project.pm2Name.count == "devbar-frontend-".count + 4)
 }
 
 @Test func discoveredProjectPm2NameSanitization() {
@@ -21,7 +22,23 @@ import Foundation
         relativePath: "my cool app",
         startCommand: "npm run dev"
     )
-    #expect(project.pm2Name == "devbar-my-cool-app")
+    #expect(project.pm2Name.hasPrefix("devbar-my-cool-app-"))
+}
+
+@Test func pm2NameIsStableForSamePath() {
+    let a = DiscoveredProject(name: "cds", path: "/A/cds",
+                              relativePath: "A/cds", startCommand: "npm run dev")
+    let b = DiscoveredProject(name: "cds", path: "/A/cds",
+                              relativePath: "A/cds", startCommand: "npm run dev")
+    #expect(a.pm2Name == b.pm2Name)
+}
+
+@Test func pm2NameDiffersForSameNameDifferentPath() {
+    let a = DiscoveredProject(name: "cds", path: "/Users/me/Code/Perforce/cds",
+                              relativePath: "Perforce/cds", startCommand: "npm run dev")
+    let b = DiscoveredProject(name: "cds", path: "/Users/me/Code/Perforce/cds-setup/cds",
+                              relativePath: "Perforce/cds-setup/cds", startCommand: "npm run dev")
+    #expect(a.pm2Name != b.pm2Name)
 }
 
 @Test func projectStateEquality() {

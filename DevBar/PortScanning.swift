@@ -314,15 +314,39 @@ struct LivePortScanner: PortScanning {
     }
 
     static func findGitRoot(from path: String) -> URL? {
+        // Skip system + app-data directories. Walking up from e.g. a Docker
+        // or Xcode worker whose cwd lives in /Applications/... or
+        // ~/Library/Containers/... triggers macOS TCC "access data from other
+        // apps" prompts on every fileExists call, and none of these paths
+        // are ever a dev project anyway.
+        if isProtectedSystemPath(path) { return nil }
+
         var current = URL(filePath: path)
         let fm = FileManager.default
         while current.path() != "/" {
+            if isProtectedSystemPath(current.path()) { return nil }
             if fm.fileExists(atPath: current.appending(path: ".git").path()) {
                 return current
             }
             current = current.deletingLastPathComponent()
         }
         return nil
+    }
+
+    static func isProtectedSystemPath(_ path: String) -> Bool {
+        // Only paths that actually trigger macOS TCC "access data from other
+        // apps" or "App Management" prompts. /private/, /usr/, etc. don't
+        // prompt and /private/var/folders is where temp test fixtures live.
+        let systemPrefixes = ["/System/", "/Library/", "/Applications/"]
+        for prefix in systemPrefixes where path.hasPrefix(prefix) { return true }
+
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let userPrefixes = [
+            home + "/Library/",
+            home + "/Applications/",
+        ]
+        for prefix in userPrefixes where path.hasPrefix(prefix) { return true }
+        return false
     }
 
     // MARK: - Shell Execution (async, with timeout)
