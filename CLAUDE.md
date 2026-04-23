@@ -41,6 +41,21 @@ scripts/package-release.sh 0.1.0        # → dist/DevBar.app, dist/DevBar-0.1.0
 
 Tag-driven releases: `.github/workflows/release.yml` runs on `v*` tag pushes, builds Release configuration on a macOS runner, zips `DevBar.app`, and attaches it to an auto-generated GitHub Release. No signing/notarization — distribution is ad-hoc, so first-run requires right-click → Open.
 
+### Release process
+
+When shipping user-visible changes, cut a release so the downloadable binary stays in sync with `main`:
+
+```bash
+scripts/cut-release.sh          # patch bump (0.1.0 → 0.1.1) — default for bug fixes
+scripts/cut-release.sh minor    # minor bump (0.1.0 → 0.2.0) — for new features
+scripts/cut-release.sh major    # major bump (0.X.Y → 1.0.0) — for breaking changes
+scripts/cut-release.sh 1.2.3    # explicit version
+```
+
+The script requires a clean tree on `main`. It bumps `MARKETING_VERSION` across every target in `DevBar.xcodeproj`, commits as `Release vX.Y.Z`, tags, and pushes — which fires the GitHub Action that builds the `.zip` and publishes the Release. GitHub auto-generates notes from the commit log since the last tag; writing good commit messages between releases pays off here.
+
+Rule of thumb: patch for fixes, minor for any new capability or UX change worth mentioning, major saved for 1.0 once the feature set stabilises.
+
 ## Design decisions
 
 - **pm2 over raw background processes** — pm2 handles daemonization, crash recovery, and log management. We shell out to the pm2 CLI rather than reimplementing process management
@@ -94,3 +109,4 @@ Tag-driven releases: `.github/workflows/release.yml` runs on `v*` tag pushes, bu
 | `Onboarding.swift` | First-run pm2 check |
 | `.github/workflows/release.yml` | Tag-driven CI build that packages a `.app.zip` and publishes it as a GitHub Release |
 | `scripts/package-release.sh` | Local equivalent of the release workflow for ad-hoc packaging |
+| `scripts/cut-release.sh` | Bump `MARKETING_VERSION`, commit, tag, and push — triggers the release workflow |
