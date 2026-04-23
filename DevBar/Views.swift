@@ -32,6 +32,13 @@ struct DevBarMainView: View {
                 store.scanProjects(rootFolder: settings.rootFolder)
             }
         }
+        .onChange(of: settings.rootFolder) { _, newValue in
+            // Triggered when the user picks a folder via first-run or
+            // Settings, so the list populates without needing a reopen.
+            if !newValue.isEmpty {
+                store.scanProjects(rootFolder: newValue)
+            }
+        }
     }
 
     @ViewBuilder
@@ -91,11 +98,15 @@ struct DevBarMainView: View {
             return nil
         })
         let managedProjectNames = Set(store.projects.compactMap { project -> String? in
+            if store.stoppingPaths.contains(project.path) {
+                return project.name.lowercased()
+            }
             switch store.projectStates[project.path] {
             case .running, .error: return project.name.lowercased()
             default: return nil
             }
         })
+        let stoppingProjectPaths = store.stoppingPaths
         let rootFolder = settings.rootFolder
         let leftover = store.entries.filter { entry in
             !managedPorts.contains(entry.port)
@@ -103,6 +114,9 @@ struct DevBarMainView: View {
         }
         let external = leftover.filter { entry in
             guard !rootFolder.isEmpty, let root = entry.gitRootPath else { return false }
+            // Skip paths we're in the middle of stopping — the port is
+            // still listening briefly, but the row stays in Running.
+            if stoppingProjectPaths.contains(root) { return false }
             return root == rootFolder || root.hasPrefix(rootFolder + "/")
         }
         let externallyRunningPaths = Set(external.compactMap(\.gitRootPath))
@@ -131,6 +145,7 @@ struct DevBarMainView: View {
                         project: project,
                         port: port,
                         startedAt: startedAt,
+                        isStopping: store.stoppingPaths.contains(project.path),
                         editorIcon: editorIcon,
                         browserIcon: browserIcon,
                         linkablePorts: linkablePorts(excluding: port),
@@ -184,9 +199,17 @@ struct DevBarMainView: View {
             }
 
             ForEach(available) { project in
+                let conflict = store.portConflict(for: project)
+                let conflictEntry = conflict.flatMap { p in
+                    store.entries.first(where: { $0.port == p })
+                }
+                let conflictOwner = conflictEntry?.projectName
+                let conflictIsDocker = conflictOwner?.lowercased() == "docker"
                 AvailableProjectRow(
                     project: project,
-                    conflictPort: store.portConflict(for: project),
+                    conflictPort: conflict,
+                    conflictOwner: conflictOwner,
+                    conflictIsDockerOwned: conflictIsDocker,
                     dockerMissing: project.requiresDocker && !dockerRunning,
                     editorIcon: editorIcon,
                     onOpenEditor: { settings.openInEditor(path: project.path) },
@@ -220,7 +243,7 @@ struct DevBarMainView: View {
             Text("No projects folder set")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
-            Button("Choose Folder") { showSettings = true }
+            Button("Choose Folder") { settings.pickRootFolder() }
                 .font(.system(size: 11))
         }
         .frame(maxWidth: .infinity)
@@ -325,6 +348,7 @@ struct RunningProjectRow: View {
     let project: DiscoveredProject
     let port: UInt16
     let startedAt: Date
+    let isStopping: Bool
     let editorIcon: NSImage?
     let browserIcon: NSImage?
     let linkablePorts: [ActivePort]
@@ -340,7 +364,7 @@ struct RunningProjectRow: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(project.name)
                     .font(.system(size: 13, weight: .medium))
-                Text(detailText)
+                detailText
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -354,11 +378,19 @@ struct RunningProjectRow: View {
                 ActionButton(appIcon: editorIcon, fallbackSystem: "pencil", tooltip: "Open in Editor", action: onOpenEditor)
                 ActionButton(systemImage: "text.alignleft", tooltip: "View Logs", action: onOpenLogs)
                 portMenuButton
-                ActionButton(systemImage: "stop.fill", tooltip: "Stop", action: onStop)
+                if isStopping {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.7)
+                        .frame(width: 26, height: 26)
+                        .help("Stopping…")
+                } else {
+                    ActionButton(systemImage: "stop.fill", tooltip: "Stop", action: onStop)
+                }
             }
         }
         .padding(.horizontal, 4)
-        .padding(.vertical, 7)
+        .frame(height: 56)
     }
 
     @ViewBuilder
@@ -393,15 +425,18 @@ struct RunningProjectRow: View {
     /// process is likely running but routing through Docker/a proxy where
     /// lsof can't tie the listener back to our process — say so instead of
     /// pretending it's still "starting".
-    private var detailText: String {
+    private var detailText: Text {
+        let parent = (project.relativePath as NSString).deletingLastPathComponent
+        let folder = Text("\(Image(systemName: "folder"))")
+        let pathText: Text = parent.isEmpty ? folder : folder + Text(" \(parent)")
         if port > 0 {
-            return "localhost:\(port) · \(formatUptime(since: startedAt)) · \(project.relativePath)"
+            return Text("localhost:\(port) · \(formatUptime(since: startedAt)) · ") + pathText
         }
         let elapsed = Date().timeIntervalSince(startedAt)
         if elapsed < 15 {
-            return "Starting… · \(project.relativePath)"
+            return Text("Starting… · ") + pathText
         }
-        return "Running · port unknown · right-click to link · \(project.relativePath)"
+        return Text("Running · port unknown · link via ⋯ menu · ") + pathText
     }
 }
 
@@ -410,6 +445,8 @@ struct RunningProjectRow: View {
 struct AvailableProjectRow: View {
     let project: DiscoveredProject
     let conflictPort: UInt16?
+    let conflictOwner: String?
+    let conflictIsDockerOwned: Bool
     let dockerMissing: Bool
     let editorIcon: NSImage?
     let onOpenEditor: () -> Void
@@ -421,48 +458,58 @@ struct AvailableProjectRow: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 4) {
-                    Text(project.name)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(project.isSupported ? .primary : .secondary)
-                    if !project.isSupported {
-                        Image(systemName: "questionmark.circle")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
-                            .help("No dev command detected in package.json or Makefile. Open the project to configure it.")
-                    } else if dockerMissing {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                            .help("This project uses Docker, but the Docker daemon isn't running. Start Docker before clicking Start.")
-                    } else if conflictPort != nil {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
+                if !confirming {
+                    HStack(spacing: 6) {
+                        Text(project.name)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(project.isSupported ? .primary : .secondary)
+                        if !project.isSupported {
+                            Image(systemName: "questionmark.circle")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.tertiary)
+                                .help("No dev command detected in package.json or Makefile. Open the project to configure it.")
+                        }
+                        if project.isComplexOrchestration {
+                            Text("Run in terminal")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.tertiary)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .fill(Color.primary.opacity(0.07))
+                                )
+                                .help("Complex multi-service stack — DevBar may not manage this reliably. Running directly in a terminal is usually more predictable.")
+                        }
                     }
                 }
-                Text(subtitle)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                subtitleText
+                    .font(.system(size: confirming ? 10 : 11))
+                    .foregroundStyle(confirming ? .primary : .secondary)
+                    .lineLimit(confirming ? 3 : 1)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help(subtitleHelp)
             }
             Spacer()
-            if confirming, let port = conflictPort {
-                ConfirmReplaceButtons(
-                    port: port,
+            if confirming {
+                ConfirmRunButtons(
                     onCancel: { confirming = false },
                     onConfirm: {
                         confirming = false
-                        onReplace()
+                        if conflictPort != nil {
+                            onReplace()
+                        } else {
+                            onStart()
+                        }
                     }
                 )
             } else {
                 HStack(spacing: 4) {
                     ActionButton(appIcon: editorIcon, fallbackSystem: "pencil", tooltip: "Open in Editor", action: onOpenEditor)
                     if project.isSupported {
-                        ActionButton(systemImage: "play.fill", tooltip: "Start") {
-                            if conflictPort != nil {
+                        ActionButton(systemImage: "play.fill", tooltip: "Run") {
+                            if needsConfirm {
                                 confirming = true
                             } else {
                                 onStart()
@@ -473,31 +520,78 @@ struct AvailableProjectRow: View {
             }
         }
         .padding(.horizontal, 4)
-        .padding(.vertical, 7)
+        .frame(height: 56)
         .onChange(of: conflictPort) { _, newValue in
             if newValue == nil { confirming = false }
         }
     }
 
-    private var subtitle: String {
-        if confirming, let port = conflictPort {
-            return "Kill process on :\(port) and start?"
+    /// Combined confirm message — lists every reason we're asking before
+    /// starting, so the "Run anyway" button has context no matter what
+    /// combination of issues applies.
+    private var confirmMessage: String {
+        var parts: [String] = []
+        if project.isComplexOrchestration {
+            parts.append("Multi-service stack — usually better run from a terminal.")
         }
         if let port = conflictPort {
-            return "Port \(port) busy · \(project.relativePath)"
+            if conflictIsDockerOwned {
+                parts.append("Port \(port) held by Docker — running this will stop Docker Desktop.")
+            } else {
+                let owner = conflictOwner ?? "another process"
+                parts.append("Port \(port) used by \(owner) — running this will stop \(owner).")
+            }
+        }
+        return parts.joined(separator: " ")
+    }
+
+    /// Whether clicking Start should first ask the user to confirm.
+    /// Triggered by port conflicts and by projects flagged as complex
+    /// orchestration stacks (where DevBar is unlikely to manage well).
+    private var needsConfirm: Bool {
+        conflictPort != nil || project.isComplexOrchestration
+    }
+
+    /// Hover text for the subtitle — only set when there's useful context
+    /// beyond what's already visible (mainly the port-conflict warning).
+    private var subtitleHelp: String {
+        if confirming { return "" }
+        if let port = conflictPort {
+            let owner = conflictOwner ?? "another process"
+            if conflictIsDockerOwned {
+                return "Port \(port) is held by Docker (com.docker.backend). Running this project will stop the Docker backend, which shuts down Docker Desktop and makes all running containers unreachable."
+            }
+            return "Port \(port) is in use by \(owner). Running this project will stop \(owner) first."
+        }
+        return ""
+    }
+
+    private var parentPathText: Text {
+        let parent = (project.relativePath as NSString).deletingLastPathComponent
+        let folder = Text("\(Image(systemName: "folder"))")
+        if parent.isEmpty { return folder }
+        return folder + Text(" \(parent)")
+    }
+
+    private var subtitleText: Text {
+        if confirming {
+            return Text(confirmMessage)
+        }
+        if let port = conflictPort {
+            let owner = conflictOwner.map { " (\($0))" } ?? ""
+            return Text("\(Image(systemName: "exclamationmark.triangle.fill")) \(port)\(owner) · ") + parentPathText
         }
         if !project.isSupported {
-            return "No dev command found · \(project.relativePath)"
+            return Text("No dev command found · ") + parentPathText
         }
         if dockerMissing {
-            return "Docker not running · \(project.relativePath)"
+            return Text("\(Image(systemName: "exclamationmark.triangle.fill")) Docker not running · ") + parentPathText
         }
-        return project.relativePath
+        return parentPathText
     }
 }
 
-private struct ConfirmReplaceButtons: View {
-    let port: UInt16
+private struct ConfirmRunButtons: View {
     let onCancel: () -> Void
     let onConfirm: () -> Void
 
@@ -511,9 +605,9 @@ private struct ConfirmReplaceButtons: View {
                 .padding(.vertical, 4)
 
             Button(action: onConfirm) {
-                Text("Replace")
+                Text("Run")
                     .font(.system(size: 11, weight: .medium))
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, 10)
                     .padding(.vertical, 4)
                     .background(
                         RoundedRectangle(cornerRadius: 4)
@@ -521,7 +615,6 @@ private struct ConfirmReplaceButtons: View {
                     )
             }
             .buttonStyle(.plain)
-            .help("Stop the process on :\(port) and start this project")
         }
     }
 }
@@ -542,7 +635,7 @@ struct ErrorProjectRow: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(project.name)
                     .font(.system(size: 13, weight: .medium))
-                Text("\(message) · \(project.relativePath)")
+                subtitleText
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -557,7 +650,14 @@ struct ErrorProjectRow: View {
             }
         }
         .padding(.horizontal, 4)
-        .padding(.vertical, 7)
+        .frame(height: 56)
+    }
+
+    private var subtitleText: Text {
+        let parent = (project.relativePath as NSString).deletingLastPathComponent
+        let folder = Text("\(Image(systemName: "folder"))")
+        let pathText: Text = parent.isEmpty ? folder : folder + Text(" \(parent)")
+        return Text("\(message) · ") + pathText
     }
 }
 
@@ -590,11 +690,11 @@ struct ExternalProjectRow: View {
                 if entry.gitRootPath != nil {
                     ActionButton(appIcon: editorIcon, fallbackSystem: "pencil", tooltip: "Open in Editor", action: onOpenEditor)
                 }
-                ActionButton(systemImage: "xmark", tooltip: "Kill", action: onKill)
+                ActionButton(systemImage: "stop.fill", tooltip: "Stop", action: onKill)
             }
         }
         .padding(.horizontal, 4)
-        .padding(.vertical, 7)
+        .frame(height: 56)
     }
 
     private var subtitle: String {
@@ -628,7 +728,7 @@ struct UnmanagedPortRow: View {
             }
         }
         .padding(.horizontal, 4)
-        .padding(.vertical, 7)
+        .frame(height: 56)
     }
 }
 

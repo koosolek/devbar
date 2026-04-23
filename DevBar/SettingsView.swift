@@ -39,10 +39,8 @@ struct SettingsView: View {
 
                     Spacer()
 
-                    Button("Choose...") {
-                        selectFolder()
-                    }
-                    .font(.system(size: 11))
+                    Button("Choose...") { settings.pickRootFolder() }
+                        .font(.system(size: 11))
                 }
             }
             .padding(.horizontal, 4)
@@ -182,17 +180,6 @@ struct SettingsView: View {
             if case .custom(let cmd) = settings.selectedEditor {
                 customEditorCommand = cmd
             }
-        }
-    }
-
-    private func selectFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.message = "Choose your projects root folder"
-        if panel.runModal() == .OK, let url = panel.url {
-            settings.rootFolder = url.path
         }
     }
 

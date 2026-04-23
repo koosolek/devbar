@@ -91,6 +91,21 @@ final class SettingsStore {
         }
     }
 
+    /// Show the native folder picker and, on OK, store the choice as the
+    /// projects root. Activating the app first so the panel comes up
+    /// focused — LSUIElement apps otherwise open it unfocused.
+    func pickRootFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose your projects root folder"
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        if panel.runModal() == .OK, let url = panel.url {
+            rootFolder = url.path
+        }
+    }
+
     func openInEditor(path: String) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")

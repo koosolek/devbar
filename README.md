@@ -26,17 +26,34 @@ DevBar sits in your menu bar and gives you control over your dev servers:
 
 - macOS 14 (Sonoma) or later
 - [pm2](https://pm2.keymetrics.io/) -- install with `npm install -g pm2`
-- Xcode 15+ (to build from source)
 
-## Build from source
+## Install
+
+### From a release (recommended)
+
+1. Grab `DevBar-<version>.zip` from the [latest release](https://github.com/koosolek/devbar/releases/latest).
+2. Unzip and drag `DevBar.app` into `/Applications`.
+3. **First launch: right-click → Open**. DevBar is ad-hoc signed, so Gatekeeper asks once; click "Open" to allow.
+4. Install pm2 if you haven't yet: `npm install -g pm2`.
+
+### Build from source
+
+Requires Xcode 15+.
 
 ```bash
 git clone https://github.com/koosolek/devbar.git
 cd devbar
+scripts/package-release.sh              # → dist/DevBar.app + dist/DevBar-dev.zip
+cp -R dist/DevBar.app /Applications/
+```
+
+Or just a plain debug build:
+
+```bash
 xcodebuild -scheme DevBar -configuration Debug build CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO
 ```
 
-The built app will be in `~/Library/Developer/Xcode/DerivedData/DevBar-*/Build/Products/Debug/DevBar.app`.
+Debug build lands in `~/Library/Developer/Xcode/DerivedData/DevBar-*/Build/Products/Debug/DevBar.app`.
 
 ## Testing
 

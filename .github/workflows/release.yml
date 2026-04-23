@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build + package DevBar
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select latest stable Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Build Release (unsigned, ad-hoc)
+        run: |
+          xcodebuild \
+            -scheme DevBar \
+            -configuration Release \
+            -derivedDataPath build \
+            -destination "generic/platform=macOS" \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package .app.zip
+        id: pkg
+        run: |
+          APP_PATH="$(find build/Build/Products/Release -maxdepth 2 -name 'DevBar.app' -type d | head -n 1)"
+          if [ -z "$APP_PATH" ]; then
+            echo "::error::Could not locate DevBar.app after build"
+            exit 1
+          fi
+          VERSION="${GITHUB_REF_NAME#v}"
+          ZIP_NAME="DevBar-${VERSION}.zip"
+          cd "$(dirname "$APP_PATH")"
+          # ditto preserves bundle metadata + extended attributes, which
+          # matters for macOS to recognise the .app correctly.
+          ditto -c -k --keepParent DevBar.app "$ZIP_NAME"
+          echo "zip_path=$PWD/$ZIP_NAME" >> "$GITHUB_OUTPUT"
+          echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+          shasum -a 256 "$ZIP_NAME" | tee "$ZIP_NAME.sha256"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.pkg.outputs.zip_path }}
+            ${{ steps.pkg.outputs.zip_path }}.sha256
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            1. Download `${{ steps.pkg.outputs.zip_name }}` below, unzip, drag `DevBar.app` to `/Applications`.
+            2. First launch: **right-click → Open** (it's ad-hoc signed, so Gatekeeper asks for confirmation once).
+            3. Install pm2 if you haven't: `npm install -g pm2`.
+
+            Checksum: see the `.sha256` file attached.

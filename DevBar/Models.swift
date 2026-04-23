@@ -121,6 +121,14 @@ struct DiscoveredProject: Identifiable, Equatable, Hashable, Sendable {
 
     var isSupported: Bool { startCommand != nil }
 
+    /// Heuristic: projects that declare many Docker services (e.g. cds-setup)
+    /// are orchestration stacks, not single dev servers. DevBar's one-click
+    /// start tends to be unreliable for these; the user's own `make` +
+    /// terminal is the right tool. We show an info icon as a heads-up.
+    var isComplexOrchestration: Bool {
+        composePorts.count >= 5
+    }
+
     var id: String { path }
 
     var pm2Name: String {

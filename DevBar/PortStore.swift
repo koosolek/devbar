@@ -31,6 +31,12 @@ final class PortStore {
     /// rather than a hardcoded localhost.
     var logDetectedURLs: [String: URL] = [:]
 
+    /// Project paths currently in the middle of an async stop. We keep the
+    /// row in the Running section with a spinner during this window so it
+    /// doesn't briefly jump to External (which picks up the still-listening
+    /// port whose git root matches an un-running project).
+    var stoppingPaths: Set<String> = []
+
     @ObservationIgnored
     @AppStorage("refreshInterval") private var storedInterval: Double = RefreshInterval.defaultInterval.rawValue
 
@@ -317,11 +323,27 @@ final class PortStore {
     }
 
     func stopProject(_ project: DiscoveredProject) async {
+        stoppingPaths.insert(project.path)
+        defer { stoppingPaths.remove(project.path) }
         do {
             try await processManager.stop(project: project)
+            // Wait for the port to actually clear before transitioning state.
+            // Otherwise the row would briefly move to the External section
+            // (port still in lsof, state now .stopped, git root matches).
+            await waitForPortToClear(project: project, timeoutMs: 5000)
             projectStates[project.path] = .stopped
         } catch {
             projectStates[project.path] = .error(message: error.localizedDescription)
+        }
+    }
+
+    private func waitForPortToClear(project: DiscoveredProject, timeoutMs: Int) async {
+        let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000)
+        while Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(250))
+            refresh()
+            try? await Task.sleep(for: .milliseconds(150))
+            if findPortForProject(project) == nil { return }
         }
     }
 
