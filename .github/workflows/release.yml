@@ -76,7 +76,9 @@ jobs:
             ## Install
 
             1. Download `${{ steps.pkg.outputs.zip_name }}` below, unzip, drag `DevBar.app` to `/Applications`.
-            2. First launch: **right-click → Open** (it's ad-hoc signed, so Gatekeeper asks for confirmation once).
+            2. Bypass Gatekeeper (DevBar is unsigned):
+               - **Terminal:** `xattr -d com.apple.quarantine /Applications/DevBar.app`
+               - **GUI:** double-click, dismiss the "Not Opened" dialog, then System Settings → Privacy & Security → **Open Anyway**.
             3. Install pm2 if you haven't: `npm install -g pm2`.
 
             Checksum: see the `.sha256` file attached.

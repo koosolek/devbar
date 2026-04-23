@@ -33,7 +33,9 @@ DevBar sits in your menu bar and gives you control over your dev servers:
 
 1. Grab `DevBar-<version>.zip` from the [latest release](https://github.com/koosolek/devbar/releases/latest).
 2. Unzip and drag `DevBar.app` into `/Applications`.
-3. **First launch: right-click → Open**. DevBar is ad-hoc signed, so Gatekeeper asks once; click "Open" to allow.
+3. Bypass Gatekeeper (DevBar is unsigned — no Apple Developer Program). Pick either:
+   - **Terminal:** `xattr -d com.apple.quarantine /Applications/DevBar.app` — then double-click to open.
+   - **GUI:** double-click, dismiss the "Not Opened" dialog, go to **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** next to the DevBar notice.
 4. Install pm2 if you haven't yet: `npm install -g pm2`.
 
 ### Build from source
