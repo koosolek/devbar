@@ -11,12 +11,24 @@ permissions:
 jobs:
   build:
     name: Build + package DevBar
-    runs-on: macos-14
+    # macos-15 (or newer) ships Xcode 16+, which our xcodeproj needs
+    # (objectVersion 77, introduced with Xcode 16). macos-14 had only
+    # Xcode 15.4 and silently failed with "future project file format".
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select latest stable Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app
+      - name: Select Xcode 16+
+        run: |
+          # Pick the newest Xcode available on the runner so we don't
+          # break again if macos-15 eventually defaults to Xcode 15.x
+          # for some reason.
+          LATEST=$(ls /Applications | grep -E '^Xcode(_[0-9.]+)?\.app$' | \
+                   awk -F'[_.]' '{print $2" "$0}' | sort -nr | head -1 | cut -d' ' -f2)
+          if [ -n "$LATEST" ]; then
+            echo "Selecting /Applications/$LATEST"
+            sudo xcode-select -s "/Applications/$LATEST"
+          fi
 
       - name: Show toolchain
         run: |
