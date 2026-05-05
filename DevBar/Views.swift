@@ -364,11 +364,19 @@ struct RunningProjectRow: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(project.name)
                     .font(.system(size: 13, weight: .medium))
-                detailText
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                HStack(spacing: 4) {
+                    detailText
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if showsPortHint {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                            .help("Process is running but DevBar can't detect a listening port. Use the ⋯ menu to link one manually if it actually has one.")
+                    }
+                }
             }
             Spacer()
             HStack(spacing: 4) {
@@ -424,7 +432,8 @@ struct RunningProjectRow: View {
     /// After that, if pm2 still says online but we've found no port, the
     /// process is likely running but routing through Docker/a proxy where
     /// lsof can't tie the listener back to our process — say so instead of
-    /// pretending it's still "starting".
+    /// pretending it's still "starting". The "how to fix" hint moves to a
+    /// trailing info icon (`showsPortHint`) so the line stays scannable.
     private var detailText: Text {
         let parent = (project.relativePath as NSString).deletingLastPathComponent
         let folder = Text("\(Image(systemName: "folder"))")
@@ -432,11 +441,14 @@ struct RunningProjectRow: View {
         if port > 0 {
             return Text("localhost:\(port) · \(formatUptime(since: startedAt)) · ") + pathText
         }
-        let elapsed = Date().timeIntervalSince(startedAt)
-        if elapsed < 15 {
+        if Date().timeIntervalSince(startedAt) < 15 {
             return Text("Starting… · ") + pathText
         }
-        return Text("Running · port unknown · link via ⋯ menu · ") + pathText
+        return Text("Running · port unknown · ") + pathText
+    }
+
+    private var showsPortHint: Bool {
+        port == 0 && Date().timeIntervalSince(startedAt) >= 15
     }
 }
 

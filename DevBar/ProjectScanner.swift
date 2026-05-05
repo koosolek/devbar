@@ -238,7 +238,6 @@ struct ProjectScanner: Sendable {
         let resolvedProject = projectURL.resolvingSymlinksInPath()
         let relativePath = resolvedProject.path
             .replacingOccurrences(of: rootURL.path + "/", with: "")
-        let hasCompose = Self.hasComposeFile(in: projectURL)
         return DiscoveredProject(
             name: name,
             path: resolvedProject.path,
@@ -246,11 +245,60 @@ struct ProjectScanner: Sendable {
             startCommand: startCommand,
             expectedPort: expectedPort,
             composePorts: Self.composePortsIn(projectURL),
-            requiresDocker: hasCompose
+            requiresDocker: Self.projectNeedsDocker(at: projectURL)
         )
     }
 
+    /// Subdir names where projects conventionally tuck a docker-compose
+    /// file when the root is a clean app folder (cds keeps its compose at
+    /// `<root>/docker/docker-compose.yaml`).
+    private static let dockerSubdirs = ["docker", "compose", "infra", "deploy", "deployment", ".docker"]
+
+    /// Substrings that signal a `package.json` script invokes Docker. We
+    /// match on raw substrings (no boundary checks) because the scripts
+    /// we're scanning are short shell commands and `docker compose ...`
+    /// is unambiguous in that context.
+    private static let dockerScriptNeedles = [
+        "docker compose",
+        "docker-compose",
+        "docker run",
+        "docker exec",
+        "docker build"
+    ]
+
+    /// True when a project depends on Docker even if the compose file
+    /// isn't at the root. Two complementary signals: (1) a compose file
+    /// under one of the conventional subdirs, (2) any package.json
+    /// script that calls `docker …`. Either is enough to surface the
+    /// pre-start "Docker not running" warning.
+    static func projectNeedsDocker(at directory: URL) -> Bool {
+        if hasComposeFileImmediate(in: directory) { return true }
+        for sub in dockerSubdirs {
+            if hasComposeFileImmediate(in: directory.appendingPathComponent(sub)) {
+                return true
+            }
+        }
+        if let data = try? Data(contentsOf: directory.appendingPathComponent("package.json")),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let scripts = json["scripts"] as? [String: String],
+           scripts.values.contains(where: scriptInvokesDocker) {
+            return true
+        }
+        return false
+    }
+
+    static func scriptInvokesDocker(_ body: String) -> Bool {
+        dockerScriptNeedles.contains { body.contains($0) }
+    }
+
+    /// Existing call sites (DockerStatus warning gate, tests) still want
+    /// the old root-only semantics — keep this name pointing at the
+    /// strict check and add `projectNeedsDocker` for the broader signal.
     static func hasComposeFile(in directory: URL) -> Bool {
+        hasComposeFileImmediate(in: directory)
+    }
+
+    private static func hasComposeFileImmediate(in directory: URL) -> Bool {
         for name in composeFileNames {
             let url = directory.appendingPathComponent(name)
             if FileManager.default.fileExists(atPath: url.path) { return true }

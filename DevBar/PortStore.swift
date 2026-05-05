@@ -60,6 +60,12 @@ final class PortStore {
     /// Observable so views can react to simultaneous-start races.
     private var pendingStartPaths: Set<String> = []
     @ObservationIgnored private let knownPortsDefaultsKey = "knownPorts"
+    /// Sliding window of pm2 `restart_time` samples per project, used to
+    /// detect crash-loops where pm2 keeps restarting because each run lives
+    /// past `min-uptime` and `--max-restarts` never trips.
+    @ObservationIgnored private var restartHistory: [String: [(date: Date, count: Int)]] = [:]
+    private static let crashLoopWindow: TimeInterval = 30
+    private static let crashLoopRestartThreshold = 3
 
     init(scanner: PortScanning = LivePortScanner()) {
         self.scanner = scanner
@@ -287,6 +293,7 @@ final class PortStore {
         let startTime = Date()
         projectStates[project.path] = .running(port: 0, startedAt: startTime)
         pendingStartPaths.insert(project.path)
+        restartHistory.removeValue(forKey: project.path)
 
         var env: [String: String] = [:]
         if autoAssignPort {
@@ -351,6 +358,7 @@ final class PortStore {
     /// Used for errored/stuck rows where a plain `stop` would leave a pm2 entry behind.
     func deleteProject(_ project: DiscoveredProject) async {
         pendingStartPaths.remove(project.path)
+        restartHistory.removeValue(forKey: project.path)
         try? await processManager.delete(project: project)
         projectStates[project.path] = .stopped
     }
@@ -410,15 +418,51 @@ final class PortStore {
         for project in projects {
             if pendingStartPaths.contains(project.path) { continue }
 
+            // Preserve startedAt across reconciles when we were already
+            // .running, so the row's elapsed timer keeps progressing. The
+            // 15s "Running · port unknown" fallback in detailText depends
+            // on this — resetting startedAt every cycle pinned the row to
+            // "Starting…" forever whenever findPortForProject missed.
+            let preservedStartedAt: Date? = {
+                if case .running(_, let existing) = projectStates[project.path] {
+                    return existing
+                }
+                return nil
+            }()
+            let alreadyAtPortZero: Bool = {
+                if case .running(0, _) = projectStates[project.path] { return true }
+                return false
+            }()
+
             if let info = pm2ByName[project.pm2Name] {
                 if info.status == "online" {
+                    if recordRestartAndDetectLoop(for: project.path, count: info.restartCount) {
+                        projectStates[project.path] = .error(
+                            message: "Crash looping — \(info.restartCount) restarts"
+                        )
+                        continue
+                    }
+                    let startedAt = preservedStartedAt ?? Date()
                     if let match = findPortForProject(project) {
-                        projectStates[project.path] = .running(port: match.port, startedAt: Date())
+                        projectStates[project.path] = .running(port: match.port, startedAt: startedAt)
                         if match.isStrong {
                             rememberPort(match.port, for: project.path)
                         }
                     } else {
-                        projectStates[project.path] = .running(port: 0, startedAt: Date())
+                        if !alreadyAtPortZero {
+                            // One-shot diagnostic: captures why the port
+                            // match failed the first time it does. If a
+                            // project gets stuck we get one log line per
+                            // stuck-cycle entry instead of every refresh.
+                            let entryList = entries
+                                .map { "\($0.port)/\($0.projectName)" }
+                                .joined(separator: ",")
+                            let known = knownPorts[project.path].map(String.init) ?? "nil"
+                            let logURL = logDetectedURLs[project.path]?.absoluteString ?? "nil"
+                            let expected = project.expectedPort.map(String.init) ?? "nil"
+                            Log.store.info("port match nil for \(project.pm2Name): entries=[\(entryList)] known=\(known) logURL=\(logURL) expected=\(expected)")
+                        }
+                        projectStates[project.path] = .running(port: 0, startedAt: startedAt)
                     }
                 } else if info.status == "errored" {
                     projectStates[project.path] = .error(message: "Process crashed")
@@ -431,6 +475,20 @@ final class PortStore {
                 }
             }
         }
+    }
+
+    /// Append a restart-count sample, prune samples older than the
+    /// crash-loop window, and return true when the count grew by at least
+    /// `crashLoopRestartThreshold` within the window.
+    private func recordRestartAndDetectLoop(for path: String, count: Int) -> Bool {
+        let now = Date()
+        var samples = restartHistory[path] ?? []
+        samples.append((date: now, count: count))
+        let cutoff = now.addingTimeInterval(-Self.crashLoopWindow)
+        samples = samples.filter { $0.date >= cutoff }
+        restartHistory[path] = samples
+        guard let oldest = samples.first else { return false }
+        return count - oldest.count >= Self.crashLoopRestartThreshold
     }
 
     /// Returns the port this project would likely try to bind, derived from

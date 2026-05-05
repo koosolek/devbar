@@ -21,13 +21,17 @@ struct DevBarApp: App {
                 if case .running = store.projectStates[project.path] { return true }
                 return false
             }.count
+            let errorCount = store.projects.filter { project in
+                if case .error = store.projectStates[project.path] { return true }
+                return false
+            }.count
             // MenuBarExtra's status-button renders SwiftUI views
             // unreliably when the label contains more than one Image
             // (HStack, Text+Image interpolation, overlays all failed).
             // Pre-rendering both SF Symbols into a single NSImage via
             // Core Graphics is the approach apps like Stats use — the
             // status button then just displays one image.
-            Image(nsImage: menuBarImage(count: runningCount))
+            Image(nsImage: menuBarImage(runningCount: runningCount, errorCount: errorCount))
             .onAppear {
                 store.ensurePolling()
                 if settings.hasRootFolder {
@@ -55,21 +59,21 @@ struct LogWindowTarget: Hashable, Codable {
     let projectName: String
 }
 
-/// SF Symbol name for the running-count badge. `N.circle.fill` exists for
-/// every integer from 0 through 50; anything above becomes an ellipsis
-/// badge as an easter egg / overflow indicator.
-private func badgeSymbolName(for count: Int) -> String {
-    count >= 0 && count <= 50 ? "\(count).circle.fill" : "ellipsis.circle.fill"
-}
+/// Slightly desaturated blue used for the running-count badge. Reads as
+/// neutral status next to the more attention-grabbing red error badge.
+private let countBadgeFill = NSColor(srgbRed: 0.36, green: 0.58, blue: 0.85, alpha: 1.0)
 
 /// Build the menu-bar image: drive icon (template-style, crisp, adapts
-/// to menu-bar theme) + a manually-drawn red circle with a white digit
-/// as the badge, placed top-right. Only drawn when count > 0.
+/// to menu-bar theme) + a manually-drawn badge.
 ///
-/// The badge is hand-drawn rather than sourced from `N.circle.fill`
-/// because that SF Symbol is single-layer — its digit is a transparent
-/// cutout, so tinting the symbol red makes the digit disappear entirely.
-private func menuBarImage(count: Int) -> NSImage {
+/// Errors override the running count — one signal at a time: red `!` when
+/// any project is in `.error`, otherwise muted blue digit when something is
+/// running, otherwise no badge.
+///
+/// The badge is hand-drawn rather than sourced from an SF Symbol because
+/// `N.circle.fill` is single-layer — its digit is a transparent cutout, so
+/// tinting the whole symbol makes the digit/`!` disappear entirely.
+private func menuBarImage(runningCount: Int, errorCount: Int) -> NSImage {
     let canvas = NSSize(width: 26, height: 18)
     let image = NSImage(size: canvas, flipped: false) { _ in
         // Drive icon, centered. `pointSize: 14` matches the stock
@@ -91,9 +95,17 @@ private func menuBarImage(count: Int) -> NSImage {
             driveRect.fill(using: .sourceAtop)
         }
 
-        // Red circle + white digit, drawn by hand for full control over
-        // both layers. Skipped entirely when nothing is running.
-        if count > 0 {
+        let badge: (text: String, fill: NSColor)? = {
+            if errorCount > 0 {
+                return ("!", .systemRed)
+            }
+            if runningCount > 0 {
+                return (runningCount > 9 ? "∞" : "\(runningCount)", countBadgeFill)
+            }
+            return nil
+        }()
+
+        if let badge {
             let diameter: CGFloat = 12
             let circleRect = NSRect(
                 x: canvas.width - diameter,
@@ -101,23 +113,22 @@ private func menuBarImage(count: Int) -> NSImage {
                 width: diameter,
                 height: diameter
             )
-            NSColor.systemRed.setFill()
+            badge.fill.setFill()
             NSBezierPath(ovalIn: circleRect).fill()
 
-            let text = count > 9 ? "∞" : "\(count)"
-            let digitAttrs: [NSAttributedString.Key: Any] = [
+            let attrs: [NSAttributedString.Key: Any] = [
                 .font: NSFont.systemFont(ofSize: 9, weight: .bold),
                 .foregroundColor: NSColor.white
             ]
-            let digit = NSAttributedString(string: text, attributes: digitAttrs)
-            let digitSize = digit.size()
+            let glyph = NSAttributedString(string: badge.text, attributes: attrs)
+            let glyphSize = glyph.size()
             // +1 on Y because the glyph baseline metrics leave it
             // sitting slightly low within the circle.
-            let digitOrigin = NSPoint(
-                x: circleRect.midX - digitSize.width / 2,
-                y: circleRect.midY - digitSize.height / 2 + 1
+            let glyphOrigin = NSPoint(
+                x: circleRect.midX - glyphSize.width / 2,
+                y: circleRect.midY - glyphSize.height / 2 + 1
             )
-            digit.draw(at: digitOrigin)
+            glyph.draw(at: glyphOrigin)
         }
         return true
     }

@@ -5,6 +5,12 @@ struct Pm2ProcessInfo: Sendable {
     let name: String
     let status: String // "online", "stopped", "errored"
     let pid: Int32?
+    /// pm2's lifetime restart counter for this process. Used by PortStore to
+    /// catch crash-loops where pm2 keeps restarting because each run lives
+    /// past `min-uptime` (so pm2 doesn't trip its own `--max-restarts` cap)
+    /// but the process is still failing every time — turbo + missing Docker
+    /// is the canonical case.
+    let restartCount: Int
 }
 
 @MainActor
@@ -144,7 +150,8 @@ final class ProcessManager {
             let pm2Env = entry["pm2_env"] as? [String: Any]
             let status = pm2Env?["status"] as? String ?? "unknown"
             let pid = entry["pid"] as? Int32
-            return Pm2ProcessInfo(name: name, status: status, pid: pid)
+            let restartCount = (pm2Env?["restart_time"] as? Int) ?? 0
+            return Pm2ProcessInfo(name: name, status: status, pid: pid, restartCount: restartCount)
         }
     }
 

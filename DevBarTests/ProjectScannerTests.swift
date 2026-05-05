@@ -245,6 +245,92 @@ import Foundation
     #expect(ProjectScanner.extractCommandFromReadme(readme) == nil)
 }
 
+@Test func projectNeedsDockerForComposeInDockerSubdir() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("devbar-test-\(UUID().uuidString)")
+    let projectDir = root.appendingPathComponent("cds-clone")
+    let dockerDir = projectDir.appendingPathComponent("docker")
+    try FileManager.default.createDirectory(
+        at: dockerDir, withIntermediateDirectories: true
+    )
+    try """
+    { "name": "cds-clone", "scripts": { "dev": "./dev.sh" } }
+    """.write(
+        to: projectDir.appendingPathComponent("package.json"),
+        atomically: true, encoding: .utf8
+    )
+    try "services:\n  api: { image: foo }\n".write(
+        to: dockerDir.appendingPathComponent("docker-compose.yaml"),
+        atomically: true, encoding: .utf8
+    )
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let scanner = ProjectScanner()
+    let projects = scanner.scan(rootFolder: root.path)
+
+    #expect(projects.count == 1)
+    #expect(projects[0].requiresDocker == true)
+}
+
+@Test func projectNeedsDockerForScriptInvokingDockerCompose() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("devbar-test-\(UUID().uuidString)")
+    let projectDir = root.appendingPathComponent("svc")
+    try FileManager.default.createDirectory(
+        at: projectDir, withIntermediateDirectories: true
+    )
+    try """
+    {
+        "name": "svc",
+        "scripts": {
+            "dev": "node server.js",
+            "down": "docker compose -f infra/compose.yaml down"
+        }
+    }
+    """.write(
+        to: projectDir.appendingPathComponent("package.json"),
+        atomically: true, encoding: .utf8
+    )
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let scanner = ProjectScanner()
+    let projects = scanner.scan(rootFolder: root.path)
+
+    #expect(projects.count == 1)
+    #expect(projects[0].requiresDocker == true)
+}
+
+@Test func projectNeedsDockerFalseForPlainNodeProject() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("devbar-test-\(UUID().uuidString)")
+    let projectDir = root.appendingPathComponent("plain")
+    try FileManager.default.createDirectory(
+        at: projectDir, withIntermediateDirectories: true
+    )
+    try """
+    { "name": "plain", "scripts": { "dev": "next dev --port 3001" } }
+    """.write(
+        to: projectDir.appendingPathComponent("package.json"),
+        atomically: true, encoding: .utf8
+    )
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let scanner = ProjectScanner()
+    let projects = scanner.scan(rootFolder: root.path)
+
+    #expect(projects.count == 1)
+    #expect(projects[0].requiresDocker == false)
+}
+
+@Test func scriptInvokesDockerMatchesExpectedPatterns() {
+    #expect(ProjectScanner.scriptInvokesDocker("docker compose up -d"))
+    #expect(ProjectScanner.scriptInvokesDocker("docker-compose -f x.yml up"))
+    #expect(ProjectScanner.scriptInvokesDocker("docker run --rm node:20"))
+    #expect(ProjectScanner.scriptInvokesDocker("pnpm run pre && docker exec foo bash"))
+    #expect(!ProjectScanner.scriptInvokesDocker("next dev --port 3001"))
+    #expect(!ProjectScanner.scriptInvokesDocker("vite --host 0.0.0.0"))
+}
+
 @Test func scanRespectsThreeLevelDepthLimit() async throws {
     let root = FileManager.default.temporaryDirectory
         .appendingPathComponent("devbar-test-\(UUID().uuidString)")
